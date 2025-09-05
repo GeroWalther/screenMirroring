@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  signaling-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: screen-mirror-signaling
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+    networks:
+      - screen-mirror-network
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "require('http').get('http://localhost:8080/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  screen-mirror-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
