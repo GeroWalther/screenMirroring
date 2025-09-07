@@ -19,7 +19,7 @@ import {
   RTCView,
   MediaStream,
 } from 'react-native-webrtc';
-import { createWebRTCSignaling } from '../../rtc-signal/shared/signaling.js';
+import { createWebRTCSignaling } from '../../../rtc-signal/shared/signaling.js';
 
 interface ConnectionState {
   status: string;
@@ -28,7 +28,7 @@ interface ConnectionState {
   isStreaming: boolean;
 }
 
-const SIGNALING_URL = 'ws://192.168.1.100:8080'; // Default - will be configurable
+const SIGNALING_URL = 'ws://localhost:8080'; // Default - change this to your server IP
 const DEFAULT_ROOM = 'livingroom';
 
 export default function ScreenReceiver() {
@@ -409,9 +409,23 @@ export default function ScreenReceiver() {
             <Pressable
               style={[styles.button, styles.settingsButton]}
               onPress={() => {
-                Alert.alert('Settings', `Room: ${room}\nServer: ${serverUrl}`, [
-                  { text: 'OK', style: 'default' },
-                ]);
+                Alert.prompt(
+                  'Server Settings',
+                  'Enter signaling server URL:',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'OK',
+                      onPress: (url) => {
+                        if (url && url.trim()) {
+                          setServerUrl(url.trim());
+                        }
+                      },
+                    },
+                  ],
+                  'plain-text',
+                  serverUrl
+                );
               }}>
               <Text style={styles.buttonText}>Settings</Text>
             </Pressable>

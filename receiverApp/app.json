@@ -15,14 +15,25 @@
       },
       "permissions": [
         "android.permission.INTERNET",
+        "android.permission.WAKE_LOCK",
+        "android.permission.INTERNET",
         "android.permission.WAKE_LOCK"
       ],
       "intentFilters": [
         {
           "action": "android.intent.action.MAIN",
-          "category": ["android.intent.category.LEANBACK_LAUNCHER"]
+          "category": [
+            "android.intent.category.LEANBACK_LAUNCHER"
+          ]
+        },
+        {
+          "action": "android.intent.action.MAIN",
+          "category": [
+            "android.intent.category.LEANBACK_LAUNCHER"
+          ]
         }
-      ]
+      ],
+      "package": "com.waltherandstilling.screenmirrorreceiver"
     },
     "plugins": [
       [
