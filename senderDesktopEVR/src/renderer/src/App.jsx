@@ -15,6 +15,7 @@ function App() {
     stats,
     room,
     serverUrl,
+    localIP,
     startSharing,
     stopSharing,
     updateQuality,
@@ -99,6 +100,7 @@ function App() {
             onTVConnect={handleTVConnect}
             onDiscoverTVs={handleDiscoverTVs}
             isStreaming={isStreaming}
+            localIP={localIP}
           />
         )}
 

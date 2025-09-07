@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'ele
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { Bonjour } from 'bonjour-service'
+import { networkInterfaces } from 'os'
 import icon from '../../resources/icon.png?asset'
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -13,15 +14,38 @@ let tray = null
 let mainWindow = null
 let isStreaming = false
 let connectedTV = null
-let availableTVs = [
-  { name: 'Living Room TV', ip: '192.168.1.100', room: 'livingroom' },
-  { name: 'Bedroom TV', ip: '192.168.1.101', room: 'bedroom' },
-  { name: 'Kitchen TV', ip: '192.168.1.102', room: 'kitchen' }
-]
+let availableTVs = []
 
 // mDNS discovery
 let bonjour = null
 let browser = null
+
+// Get local IP address
+const getLocalIPAddress = () => {
+  const nets = networkInterfaces()
+  const results = []
+
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+      if (net.family === 'IPv4' && !net.internal) {
+        results.push(net.address)
+      }
+    }
+  }
+
+  // Prefer 192.168.x.x addresses (most common for home networks)
+  const homeNetwork = results.find((ip) => ip.startsWith('192.168.'))
+  if (homeNetwork) {
+    console.log('🏠 Detected home network IP:', homeNetwork)
+    return homeNetwork
+  }
+
+  // Fallback to first available IP
+  const fallback = results[0] || 'localhost'
+  console.log('🌐 Using IP address:', fallback)
+  return fallback
+}
 
 const createTray = () => {
   try {
@@ -88,12 +112,6 @@ const updateTrayMenu = () => {
       label: '⚙️ Settings',
       click: () => {
         createWindow()
-      }
-    },
-    {
-      label: '🔍 Discover TVs',
-      click: () => {
-        discoverTVs()
       }
     },
 
@@ -186,9 +204,10 @@ const initializeMDNS = () => {
 }
 
 const discoverTVs = () => {
-  console.log('Discovering TVs via mDNS...')
+  console.log('🔍 Starting TV discovery via mDNS...')
 
   if (!bonjour) {
+    console.log('Initializing mDNS...')
     initializeMDNS()
   }
 
@@ -204,9 +223,11 @@ const discoverTVs = () => {
   const discoveredTVs = []
 
   if (bonjour) {
+    console.log('🔎 Browsing for screen mirror services...')
+
     // Browse for screen mirror services
     browser = bonjour.find({ type: 'screenmirror' }, (service) => {
-      console.log('Found TV service:', service)
+      console.log('📺 Found TV service:', service)
 
       const tv = {
         name: service.name || `TV at ${service.host}`,
@@ -216,45 +237,61 @@ const discoverTVs = () => {
         type: service.type
       }
 
+      console.log('📺 Processed TV:', tv)
+
       // Avoid duplicates
       if (!discoveredTVs.find((t) => t.ip === tv.ip)) {
         discoveredTVs.push(tv)
+        console.log('✅ Added TV to discovery list:', tv.name)
+      } else {
+        console.log('⚠️ Duplicate TV found, skipping:', tv.name)
       }
     })
 
-    // Stop discovery after 5 seconds
+    // Stop discovery after 8 seconds
     setTimeout(() => {
       if (browser) {
         browser.stop()
         browser = null
+        console.log('🔍 TV discovery stopped')
       }
 
       // Update available TVs with discovered ones
-      if (discoveredTVs.length > 0) {
-        availableTVs = [...availableTVs, ...discoveredTVs]
-      }
+      availableTVs = discoveredTVs
+      console.log('📺 Available TVs updated:', availableTVs)
 
       updateTrayMenu()
+
+      // Notify renderer about discovered TVs
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tvs-discovered', discoveredTVs)
+      }
 
       if (tray) {
         tray.displayBalloon({
           title: 'Discovery Complete',
-          content: `Found ${discoveredTVs.length} new TVs via mDNS`,
+          content: `Found ${discoveredTVs.length} TVs on network`,
           icon: nativeImage.createFromNamedImage('NSComputer')
         })
       }
 
-      console.log('TV discovery completed, found:', discoveredTVs)
-    }, 5000)
+      console.log('✅ TV discovery completed, found:', discoveredTVs.length, 'TVs')
+    }, 8000)
   } else {
-    // Fallback to static list
+    console.error('❌ mDNS not available, cannot discover TVs')
     setTimeout(() => {
       updateTrayMenu()
+
+      // Notify renderer that no TVs were found
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tvs-discovered', [])
+      }
+
       if (tray) {
         tray.displayBalloon({
-          title: 'Discovery Complete',
-          content: `Found ${availableTVs.length} TVs (static list)`,
-          icon: nativeImage.createFromNamedImage('NSComputer')
+          title: 'Discovery Failed',
+          content: 'mDNS not available - use manual connection',
+          icon: nativeImage.createFromNamedImage('NSCaution')
         })
       }
     }, 2000)
@@ -345,6 +382,11 @@ ipcMain.on('streaming-stopped', () => {
   isStreaming = false
   connectedTV = null
   updateTrayMenu()
+})
+
+// Get local IP address for renderer
+ipcMain.handle('get-local-ip', () => {
+  return getLocalIPAddress()
 })
 
 // This method will be called when Electron has finished

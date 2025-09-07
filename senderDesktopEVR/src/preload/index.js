@@ -13,9 +13,13 @@ const api = {
   streamingStarted: () => ipcRenderer.send('streaming-started'),
   streamingStopped: () => ipcRenderer.send('streaming-stopped'),
 
+  // Network utilities
+  getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
+
   // Event listeners
   onAutoConnect: (callback) => ipcRenderer.on('auto-connect', callback),
   onDisconnect: (callback) => ipcRenderer.on('disconnect', callback),
+  onTVsDiscovered: (callback) => ipcRenderer.on('tvs-discovered', callback),
 
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)

@@ -1,34 +1,58 @@
-import { useState } from 'react'
+/* eslint-disable react/prop-types */
+import { useState, useEffect } from 'react'
 
-const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
+const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming, localIP }) => {
   const [customIP, setCustomIP] = useState('')
-  const [customRoom, setCustomRoom] = useState('')
+  const [availableTVs, setAvailableTVs] = useState([])
+  const [isDiscovering, setIsDiscovering] = useState(false)
 
-  // Static list of common TVs (these would be updated by mDNS discovery)
-  const [availableTVs] = useState([
-    { name: 'Living Room TV', ip: '192.168.1.100', room: 'livingroom' },
-    { name: 'Bedroom TV', ip: '192.168.1.101', room: 'bedroom' },
-    { name: 'Kitchen TV', ip: '192.168.1.102', room: 'kitchen' }
-  ])
+  // Listen for discovered TVs from main process
+  useEffect(() => {
+    if (window.api?.onTVsDiscovered) {
+      const handleTVsFound = (tvs) => {
+        console.log('TVs discovered:', tvs)
+        setAvailableTVs(tvs)
+        setIsDiscovering(false)
+      }
+
+      window.api.onTVsDiscovered(handleTVsFound)
+
+      return () => {
+        if (window.api?.removeAllListeners) {
+          window.api.removeAllListeners('tvs-discovered')
+        }
+      }
+    }
+  }, [])
 
   const handleTVConnect = (tv) => {
+    console.log('Connecting to TV:', tv)
     onTVConnect({
-      room: tv.room,
+      room: tv.room || 'default',
       serverUrl: `ws://${tv.ip}:8080`
     })
   }
 
   const handleCustomConnect = () => {
-    if (customIP && customRoom) {
+    if (customIP) {
+      console.log('Connecting to custom IP:', customIP)
       onTVConnect({
-        room: customRoom,
+        room: 'default',
         serverUrl: `ws://${customIP}:8080`
       })
     }
   }
 
   const handleDiscover = () => {
+    console.log('Starting TV discovery...')
+    setIsDiscovering(true)
+    setAvailableTVs([])
     onDiscoverTVs()
+
+    // Timeout discovery after 10 seconds
+    setTimeout(() => {
+      setIsDiscovering(false)
+    }, 10000)
   }
 
   const validateIP = (ip) => {
@@ -39,15 +63,35 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
 
   return (
     <div className="tv-discovery">
+      <div className="network-info">
+        <h3>📡 Network Information</h3>
+        <div className="network-details">
+          <div className="network-item">
+            <span className="network-label">Your Computer IP:</span>
+            <span className="network-value">{localIP || 'Detecting...'}</span>
+          </div>
+          <div className="network-item">
+            <span className="network-label">Signaling Server:</span>
+            <span className="network-value">ws://{localIP || 'localhost'}:8080</span>
+          </div>
+        </div>
+      </div>
+
       <div className="discovery-section">
         <h3>Available TVs</h3>
 
         <div className="discovery-controls">
-          <button className="btn btn-secondary" onClick={handleDiscover} disabled={isStreaming}>
-            🔍 Discover TVs on Network
+          <button
+            className="btn btn-secondary"
+            onClick={handleDiscover}
+            disabled={isStreaming || isDiscovering}
+          >
+            {isDiscovering ? '🔄 Discovering...' : '🔍 Discover TVs on Network'}
           </button>
           <p className="discovery-info">
-            This will scan your network for Screen Mirror receiver apps
+            {isDiscovering
+              ? 'Scanning your network for Screen Mirror receiver apps...'
+              : 'This will scan your network for Screen Mirror receiver apps'}
           </p>
         </div>
 
@@ -71,15 +115,19 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
             ))
           ) : (
             <div className="no-tvs">
-              <p>No TVs found. Try discovering or add a custom connection below.</p>
+              <p>
+                {isDiscovering
+                  ? 'Scanning for TVs...'
+                  : 'No TVs found. Click "Discover TVs" or add a custom connection below.'}
+              </p>
             </div>
           )}
         </div>
       </div>
 
       <div className="custom-connection-section">
-        <h3>Custom Connection</h3>
-        <p>Manually connect to a TV by entering its IP address and room name.</p>
+        <h3>Manual Connection</h3>
+        <p>Connect directly to a TV by entering its IP address.</p>
 
         <div className="custom-form">
           <div className="form-group">
@@ -97,24 +145,12 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
             )}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="custom-room">Room Name:</label>
-            <input
-              id="custom-room"
-              type="text"
-              value={customRoom}
-              onChange={(e) => setCustomRoom(e.target.value)}
-              placeholder="livingroom"
-              disabled={isStreaming}
-            />
-          </div>
-
           <button
             className="btn btn-primary"
             onClick={handleCustomConnect}
-            disabled={!customIP || !customRoom || !validateIP(customIP) || isStreaming}
+            disabled={!customIP || !validateIP(customIP) || isStreaming}
           >
-            Connect to Custom TV
+            Connect to TV
           </button>
         </div>
       </div>
@@ -126,9 +162,13 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
           <ol>
             <li>Install the Screen Mirror Receiver app on your TV or device</li>
             <li>Connect your TV to the same Wi-Fi network as this computer</li>
+            <li>
+              <strong>Update the receiver app:</strong> Change the signaling URL to:{' '}
+              <code>ws://{localIP || 'YOUR_COMPUTER_IP'}:8080</code>
+            </li>
             <li>Open the receiver app on your TV</li>
             <li>Note the IP address shown on the TV screen</li>
-            <li>Use the "Discover TVs" button or enter the IP manually</li>
+            <li>Use the &quot;Discover TVs&quot; button or enter the IP manually</li>
           </ol>
 
           <h4>Troubleshooting:</h4>
@@ -141,7 +181,8 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming }) => {
               open
             </li>
             <li>
-              <strong>Can't find IP?</strong> Check your TV's network settings or router admin panel
+              <strong>Can&apos;t find IP?</strong> Check your TV&apos;s network settings or router
+              admin panel
             </li>
             <li>
               <strong>Firewall issues?</strong> Ensure WebSocket connections are allowed

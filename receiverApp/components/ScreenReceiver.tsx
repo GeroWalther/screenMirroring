@@ -28,8 +28,19 @@ interface ConnectionState {
   isStreaming: boolean;
 }
 
-const SIGNALING_URL = 'ws://localhost:8080'; // Default - change this to your server IP
-const DEFAULT_ROOM = 'livingroom';
+// Auto-detect signaling server or use default
+const getSignalingURL = () => {
+  // In production, this could be configured via environment variables or a config file
+  // For now, we'll use a simple detection mechanism
+  const hostname = window.location.hostname;
+  if (hostname && hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return `ws://${hostname}:8080`;
+  }
+  return 'ws://192.168.1.100:8080'; // Default fallback - user needs to update this
+};
+
+const SIGNALING_URL = getSignalingURL();
+const DEFAULT_ROOM = 'default';
 
 export default function ScreenReceiver() {
   // State
@@ -43,6 +54,7 @@ export default function ScreenReceiver() {
   const [showControls, setShowControls] = useState(true);
   const [room, setRoom] = useState(DEFAULT_ROOM);
   const [serverUrl, setServerUrl] = useState(SIGNALING_URL);
+  const [showConfig, setShowConfig] = useState(false);
 
   // Refs
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -409,22 +421,34 @@ export default function ScreenReceiver() {
             <Pressable
               style={[styles.button, styles.settingsButton]}
               onPress={() => {
-                Alert.prompt(
-                  'Server Settings',
-                  'Enter signaling server URL:',
+                Alert.alert(
+                  '📺 TV Receiver Settings',
+                  `Current Server: ${serverUrl}\nRoom: ${room}\n\nTo change server:\n1. Find your computer's IP in the desktop app\n2. Update the receiver app code\n3. Rebuild and restart this app\n\nFor production: Use environment variables or config files.`,
                   [
-                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'OK', style: 'default' },
                     {
-                      text: 'OK',
-                      onPress: (url) => {
-                        if (url && url.trim()) {
-                          setServerUrl(url.trim());
-                        }
+                      text: 'Change Server',
+                      onPress: () => {
+                        Alert.prompt(
+                          'Server Settings',
+                          'Enter signaling server URL:',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'OK',
+                              onPress: (url) => {
+                                if (url && url.trim()) {
+                                  setServerUrl(url.trim());
+                                }
+                              },
+                            },
+                          ],
+                          'plain-text',
+                          serverUrl
+                        );
                       },
                     },
-                  ],
-                  'plain-text',
-                  serverUrl
+                  ]
                 );
               }}>
               <Text style={styles.buttonText}>Settings</Text>

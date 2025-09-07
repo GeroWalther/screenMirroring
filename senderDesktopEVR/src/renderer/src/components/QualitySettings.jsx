@@ -1,34 +1,36 @@
+/* eslint-disable react/prop-types */
 import { useState } from 'react'
 
 const QualitySettings = ({ onQualityUpdate, isStreaming }) => {
-  const [maxBitrate, setMaxBitrate] = useState(2000000) // 2 Mbps
-  const [maxFramerate, setMaxFramerate] = useState(30)
+  // Default to highest quality settings
+  const [maxBitrate, setMaxBitrate] = useState(5000000) // 5 Mbps
+  const [maxFramerate, setMaxFramerate] = useState(60)
   const [scaleResolutionDownBy, setScaleResolutionDownBy] = useState(1)
 
   const presets = {
+    'ultra-high': {
+      name: 'Ultra High (5 Mbps)',
+      maxBitrate: 5000000,
+      maxFramerate: 60,
+      scaleResolutionDownBy: 1
+    },
     high: {
-      name: 'High Quality (2 Mbps)',
-      maxBitrate: 2000000,
+      name: 'High Quality (3 Mbps)',
+      maxBitrate: 3000000,
       maxFramerate: 30,
       scaleResolutionDownBy: 1
     },
     medium: {
-      name: 'Medium Quality (1 Mbps)',
-      maxBitrate: 1000000,
+      name: 'Medium Quality (1.5 Mbps)',
+      maxBitrate: 1500000,
       maxFramerate: 30,
-      scaleResolutionDownBy: 1.5
+      scaleResolutionDownBy: 1
     },
     low: {
-      name: 'Low Quality (500 Kbps)',
-      maxBitrate: 500000,
+      name: 'Low Quality (800 Kbps)',
+      maxBitrate: 800000,
       maxFramerate: 24,
-      scaleResolutionDownBy: 2
-    },
-    'ultra-low': {
-      name: 'Ultra Low (250 Kbps)',
-      maxBitrate: 250000,
-      maxFramerate: 15,
-      scaleResolutionDownBy: 3
+      scaleResolutionDownBy: 1.5
     }
   }
 
@@ -149,30 +151,30 @@ const QualitySettings = ({ onQualityUpdate, isStreaming }) => {
         <h3>Quality Guidelines</h3>
         <div className="guidelines">
           <div className="guideline-item">
-            <strong>High Quality (2+ Mbps):</strong>
-            <p>Best for fast, stable networks. Full resolution, smooth playback.</p>
+            <strong>Ultra High (5 Mbps):</strong>
+            <p>Maximum quality with 60fps. Requires excellent network. Default setting.</p>
           </div>
           <div className="guideline-item">
-            <strong>Medium Quality (1 Mbps):</strong>
-            <p>Good balance for most home networks. Slight resolution reduction.</p>
+            <strong>High Quality (3 Mbps):</strong>
+            <p>Excellent quality for most networks. Full resolution, smooth playback.</p>
           </div>
           <div className="guideline-item">
-            <strong>Low Quality (500 Kbps):</strong>
-            <p>For slower networks or when experiencing lag. Noticeable quality reduction.</p>
+            <strong>Medium Quality (1.5 Mbps):</strong>
+            <p>Good balance for average networks. Full resolution, standard frame rate.</p>
           </div>
           <div className="guideline-item">
-            <strong>Ultra Low (250 Kbps):</strong>
-            <p>Emergency setting for very poor connections. Significant quality loss.</p>
+            <strong>Low Quality (800 Kbps):</strong>
+            <p>For slower networks. Slight resolution reduction but still usable.</p>
           </div>
         </div>
 
         <div className="tips">
           <h4>💡 Optimization Tips</h4>
           <ul>
-            <li>Start with Medium quality and adjust based on performance</li>
+            <li>App defaults to Ultra High quality - reduce if you experience issues</li>
             <li>Lower frame rate if video appears choppy</li>
             <li>Reduce bitrate if connection keeps dropping</li>
-            <li>Use resolution scaling to improve performance on slower networks</li>
+            <li>Use resolution scaling only if needed for slower networks</li>
             <li>Settings can be changed during streaming for real-time optimization</li>
           </ul>
         </div>
