@@ -12,9 +12,11 @@ interface ConnectionState {
   isStreaming: boolean;
 }
 
-// Default signaling URL - update this with your computer's IP
-const SIGNALING_URL = 'ws://192.168.0.25:8080';
-const DEFAULT_ROOM = 'default';
+// Signaling server URL - automatically chooses local or cloud
+const SIGNALING_URL = __DEV__
+  ? 'ws://192.168.0.25:8080' // Local development
+  : 'wss://your-signaling-server.com'; // Cloud production
+const DEFAULT_ROOM = 'living-room'; // Default room code - user can change this
 
 export default function ScreenReceiver() {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
@@ -35,9 +37,12 @@ export default function ScreenReceiver() {
       <View style={styles.placeholder}>
         <Text style={styles.placeholderText}>📺 Screen Mirror Receiver</Text>
         <Text style={styles.roomText}>Waiting for screen share...</Text>
-        <Text style={styles.roomText}>Server: {SIGNALING_URL}</Text>
-        <Text style={styles.roomText}>Room: {DEFAULT_ROOM}</Text>
-        <Text style={styles.roomText}>Status: {connectionState.status}</Text>
+        <View style={styles.roomCodeContainer}>
+          <Text style={styles.roomCodeLabel}>Room Code:</Text>
+          <Text style={styles.roomCode}>{DEFAULT_ROOM}</Text>
+        </View>
+        <Text style={styles.serverText}>Server: {SIGNALING_URL}</Text>
+        <Text style={styles.statusText}>Status: {connectionState.status}</Text>
       </View>
 
       {/* Status overlay */}
@@ -74,7 +79,36 @@ const styles = StyleSheet.create({
     color: '#ccc',
     fontSize: 18,
     textAlign: 'center',
+    marginBottom: 20,
+  },
+  roomCodeContainer: {
+    backgroundColor: '#333',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  roomCodeLabel: {
+    color: '#ccc',
+    fontSize: 16,
     marginBottom: 8,
+  },
+  roomCode: {
+    color: '#4CAF50',
+    fontSize: 28,
+    fontWeight: 'bold',
+    letterSpacing: 2,
+  },
+  serverText: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  statusText: {
+    color: '#ccc',
+    fontSize: 16,
+    textAlign: 'center',
   },
   overlay: {
     position: 'absolute',

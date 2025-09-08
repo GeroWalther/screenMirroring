@@ -35,10 +35,10 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming, localIP }) => {
 
   const handleCustomConnect = () => {
     if (customIP) {
-      console.log('Connecting to custom IP:', customIP)
+      console.log('Connecting to room:', customIP)
       onTVConnect({
-        room: 'default',
-        serverUrl: `ws://${customIP}:8080`
+        room: customIP, // Use room code instead of default
+        serverUrl: `ws://${localIP || 'localhost'}:8080` // Use local signaling server
       })
     }
   }
@@ -125,32 +125,30 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming, localIP }) => {
         </div>
       </div>
 
-      <div className="custom-connection-section">
-        <h3>Manual Connection</h3>
-        <p>Connect directly to a TV by entering its IP address.</p>
+      <div className="room-connection-section">
+        <h3>Room-Based Connection</h3>
+        <p>Connect to any TV running the receiver app with the same room code.</p>
 
-        <div className="custom-form">
+        <div className="room-form">
           <div className="form-group">
-            <label htmlFor="custom-ip">TV IP Address:</label>
+            <label htmlFor="room-code">Room Code:</label>
             <input
-              id="custom-ip"
+              id="room-code"
               type="text"
               value={customIP}
               onChange={(e) => setCustomIP(e.target.value)}
-              placeholder="192.168.1.100"
+              placeholder="living-room"
               disabled={isStreaming}
             />
-            {customIP && !validateIP(customIP) && (
-              <span className="validation-error">Please enter a valid IP address</span>
-            )}
+            <p className="room-help">Enter the same room code shown on your TV receiver app</p>
           </div>
 
           <button
             className="btn btn-primary"
             onClick={handleCustomConnect}
-            disabled={!customIP || !validateIP(customIP) || isStreaming}
+            disabled={!customIP || isStreaming}
           >
-            Connect to TV
+            Connect to Room
           </button>
         </div>
       </div>
@@ -167,8 +165,8 @@ const TVDiscovery = ({ onTVConnect, onDiscoverTVs, isStreaming, localIP }) => {
               <code>ws://{localIP || 'YOUR_COMPUTER_IP'}:8080</code>
             </li>
             <li>Open the receiver app on your TV</li>
-            <li>Note the IP address shown on the TV screen</li>
-            <li>Use the &quot;Discover TVs&quot; button or enter the IP manually</li>
+            <li>Note the room code displayed on your TV</li>
+            <li>Enter the same room code above and click "Connect to Room"</li>
           </ol>
 
           <h4>Troubleshooting:</h4>

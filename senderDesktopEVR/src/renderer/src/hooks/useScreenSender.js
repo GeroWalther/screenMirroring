@@ -7,7 +7,11 @@ export const useScreenSender = () => {
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
   const [room, setRoom] = useState('default-room')
-  const [serverUrl, setServerUrl] = useState('ws://localhost:8080')
+  const [serverUrl, setServerUrl] = useState(
+    process.env.NODE_ENV === 'production'
+      ? 'wss://your-signaling-server.com' // Cloud WSS for production
+      : 'ws://localhost:8080' // Local for development
+  )
   const [localIP, setLocalIP] = useState('localhost')
 
   const screenSenderRef = useRef(null)

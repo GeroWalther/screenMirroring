@@ -7,7 +7,15 @@ class ScreenSender {
   constructor(options = {}) {
     this.signalingUrl = options.signalingUrl || 'ws://localhost:8080'
     this.room = options.room || 'default-room'
-    this.iceServers = options.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }]
+    this.iceServers = options.iceServers || [
+      // Google's free STUN servers
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' }
+      // Add TURN servers for production (replace with your own)
+      // { urls: 'turn:your-turn-server.com:3478', username: 'user', credential: 'pass' },
+      // { urls: 'turns:your-turn-server.com:5349', username: 'user', credential: 'pass' }
+    ]
 
     // State
     this.pc = null
