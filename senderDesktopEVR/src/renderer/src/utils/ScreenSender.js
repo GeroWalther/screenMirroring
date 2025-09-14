@@ -5,8 +5,10 @@
 
 class ScreenSender {
   constructor(options = {}) {
-    this.signalingUrl = options.signalingUrl || 'ws://localhost:8080'
-    this.room = options.room || 'default-room'
+    // Auto-detect local network IP for signaling server
+    const LOCAL_IP = '192.168.0.25'; // Your Mac's IP address
+    this.signalingUrl = options.signalingUrl || `ws://${LOCAL_IP}:8080`
+    this.room = options.room || 'living-room' // Match receiver default room
     this.iceServers = options.iceServers || [
       // Google's free STUN servers
       { urls: 'stun:stun.l.google.com:19302' },
@@ -37,9 +39,16 @@ class ScreenSender {
 
   async start() {
     try {
+      console.log('🚀 SENDER START - Initializing with config:', {
+        signalingUrl: this.signalingUrl,
+        room: this.room,
+        timestamp: new Date().toISOString()
+      })
+      
       this.updateStatus('starting')
 
       // Create signaling client
+      console.log('📡 SENDER - Creating signaling client')
       this.signalingClient = this.createWebRTCSignaling(this.signalingUrl, {
         role: 'Sender',
         room: this.room,
@@ -48,9 +57,12 @@ class ScreenSender {
       })
 
       // Connect to signaling server
+      console.log('🔗 SENDER - Attempting signaling server connection to:', this.signalingUrl)
       this.signalingClient.connect()
+      
+      console.log('✅ SENDER - Start method completed, waiting for connection...')
     } catch (error) {
-      console.error('Failed to start sender:', error)
+      console.error('❌ SENDER START FAILED:', error)
       this.onError(error)
       this.updateStatus('error')
     }
@@ -62,16 +74,24 @@ class ScreenSender {
     let reconnectAttempts = 0
     let maxReconnectAttempts = 10
     let reconnectDelay = 1000
+    let connectionId = Math.random().toString(36).substr(2, 9)
+    
+    console.log('🏭 SIGNALING CLIENT CREATED - ID:', connectionId, 'URL:', url)
 
     const client = {
       connect() {
         try {
+          console.log('🔗 SENDER WS CONNECT START - ID:', connectionId, 'URL:', url)
+          console.log('🔗 WebSocket.CONNECTING =', WebSocket.CONNECTING, 'WebSocket.OPEN =', WebSocket.OPEN)
           ws = new WebSocket(url)
+          console.log('🔗 WebSocket created - ReadyState:', ws.readyState, '(should be', WebSocket.CONNECTING, ')')
 
           ws.onopen = () => {
-            console.log('Signaling connected')
+            console.log('✅ SENDER WS CONNECTED - ID:', connectionId, 'URL:', url)
+            console.log('✅ WebSocket state: ReadyState =', ws.readyState, '(should be', WebSocket.OPEN, ')')
             reconnectAttempts = 0
             reconnectDelay = 1000
+            console.log('📡 SENDER - Calling onStatusChange("connected")')
             options.onStatusChange('connected')
           }
 
@@ -89,7 +109,13 @@ class ScreenSender {
           }
 
           ws.onclose = (event) => {
-            console.log('Signaling disconnected:', event.code, event.reason)
+            console.log('📴 Sender signaling disconnected - Code:', event.code, 'Reason:', event.reason)
+            console.log('Close event details:', {
+              wasClean: event.wasClean,
+              code: event.code,
+              reason: event.reason,
+              url: url
+            })
 
             if (reconnectAttempts < maxReconnectAttempts) {
               reconnectAttempts++
@@ -106,7 +132,12 @@ class ScreenSender {
           }
 
           ws.onerror = (error) => {
-            console.error('Signaling error:', error)
+            console.error('❌ Sender signaling error:', error)
+            console.error('WebSocket error details:', {
+              url: url,
+              readyState: ws.readyState,
+              error: error
+            })
             options.onStatusChange('error', error)
           }
         } catch (error) {
@@ -116,10 +147,20 @@ class ScreenSender {
       },
 
       send(message) {
+        console.log('📨 SENDER WS SEND - Message:', message)
+        console.log('📨 WebSocket state: exists =', !!ws, 'readyState =', ws?.readyState, 'OPEN =', WebSocket.OPEN)
+        
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(message))
+          const payload = JSON.stringify(message)
+          console.log('📨 SENDER - Sending payload:', payload)
+          ws.send(payload)
+          console.log('✅ SENDER - Message sent successfully')
         } else {
-          console.warn('Cannot send message, WebSocket not connected')
+          console.error('❌ SENDER - Cannot send message, WebSocket not connected. State:', {
+            wsExists: !!ws,
+            readyState: ws?.readyState,
+            expectedState: WebSocket.OPEN
+          })
         }
       },
 
@@ -139,10 +180,18 @@ class ScreenSender {
   }
 
   async handleStatusChange(status, data = {}) {
-    console.log('Signaling status:', status, data)
+    console.log('📊 SENDER STATUS CHANGE:', status, data)
+    console.log('📊 Current sender state:', {
+      connectionState: this.connectionState,
+      isConnected: this.isConnected,
+      signalingClientExists: !!this.signalingClient,
+      signalingClientConnected: this.signalingClient?.isConnected(),
+      timestamp: new Date().toISOString()
+    })
 
     switch (status) {
       case 'connected':
+        console.log('✅ SENDER SIGNALING CONNECTED - About to join room')
         await this.joinRoom()
         break
 
@@ -166,15 +215,28 @@ class ScreenSender {
   }
 
   async joinRoom() {
-    if (!this.signalingClient?.isConnected()) return
+    console.log('📱 Sender attempting to join room:', this.room)
+    if (!this.signalingClient?.isConnected()) {
+      console.warn('⚠️ Signaling client not connected, cannot join room')
+      return
+    }
 
     try {
-      // Send join message
-      this.signalingClient.send({
+      const joinMessage = {
         type: 'join',
         role: 'offerer',
         room: this.room
+      }
+      console.log('📱 SENDER JOIN ROOM - Sending message:', joinMessage)
+      console.log('📱 Signaling client state:', {
+        exists: !!this.signalingClient,
+        isConnected: this.signalingClient?.isConnected(),
+        readyState: this.signalingClient?.ws?.readyState
       })
+      
+      // Send join message
+      this.signalingClient.send(joinMessage)
+      console.log('✅ SENDER - Join message sent successfully')
 
       // Initialize WebRTC
       await this.initializeWebRTC()
@@ -246,29 +308,73 @@ class ScreenSender {
 
   async captureScreen() {
     try {
-      this.localStream = await navigator.mediaDevices.getDisplayMedia({
+      console.log('Attempting Electron desktop capture...')
+      
+      // Get available desktop sources using Electron's desktopCapturer
+      const sources = await window.api.getDesktopSources()
+      console.log('Available sources:', sources.length)
+      
+      if (sources.length === 0) {
+        throw new Error('No screen sources available')
+      }
+      
+      // Find the primary display (usually the first screen source)
+      const primaryScreen = sources.find(source => 
+        source.name.includes('Screen') || source.name.includes('Entire screen')
+      ) || sources[0]
+      
+      console.log('Using source:', primaryScreen.name)
+      
+      // Create constraints for getUserMedia with the desktop source
+      const constraints = {
+        audio: false, // Desktop audio capture is complex in Electron
         video: {
-          frameRate: 30,
-          displaySurface: 'monitor'
-        },
-        audio: true
-      })
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: primaryScreen.id,
+            maxFrameRate: 30,
+            maxWidth: 1920,
+            maxHeight: 1080
+          }
+        }
+      }
+      
+      // Use getUserMedia with the desktop source
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log('Electron desktop capture successful')
 
       // Handle stream ended (user clicked stop sharing)
-      this.localStream.getVideoTracks()[0].addEventListener('ended', () => {
-        console.log('Screen sharing ended by user')
-        this.stop()
-      })
+      const videoTrack = this.localStream.getVideoTracks()[0]
+      if (videoTrack) {
+        videoTrack.addEventListener('ended', () => {
+          console.log('Screen sharing ended by user')
+          this.stop()
+        })
+      }
 
       // Add tracks to peer connection
       this.localStream.getTracks().forEach((track) => {
+        console.log(`Adding ${track.kind} track to peer connection`)
         this.pc.addTrack(track, this.localStream)
       })
 
-      console.log('Screen capture started')
+      console.log(`Screen capture started - Video: ${this.localStream.getVideoTracks().length}, Audio: ${this.localStream.getAudioTracks().length}`)
+      
     } catch (error) {
       console.error('Failed to capture screen:', error)
-      throw error
+      
+      // Provide more specific error information
+      if (error.name === 'NotAllowedError') {
+        throw new Error('Screen recording permission denied. Please grant permission in System Settings > Privacy & Security > Screen Recording')
+      } else if (error.name === 'NotSupportedError') {
+        throw new Error('Screen capture not supported in this browser environment')
+      } else if (error.name === 'NotFoundError') {
+        throw new Error('No screen available for capture')
+      } else if (error.message && error.message.includes('No screen sources')) {
+        throw new Error('No screen sources found. Make sure screen recording is enabled.')
+      } else {
+        throw new Error(`Desktop capture failed: ${error.message}`)
+      }
     }
   }
 
@@ -374,9 +480,37 @@ class ScreenSender {
   }
 
   updateStatus(status, data = {}) {
+    console.log('📊 SENDER UPDATE STATUS:', status, 'Data:', data)
     this.connectionState = status
     this.onStatusChange(status, data)
-    console.log('Status updated:', status, data)
+  }
+
+  // Debug method to check current connection status
+  getConnectionStatus() {
+    const status = {
+      connectionState: this.connectionState,
+      isConnected: this.isConnected,
+      signalingUrl: this.signalingUrl,
+      room: this.room,
+      signalingClient: {
+        exists: !!this.signalingClient,
+        isConnected: this.signalingClient?.isConnected(),
+        readyState: this.signalingClient?.ws?.readyState
+      },
+      peerConnection: {
+        exists: !!this.pc,
+        connectionState: this.pc?.connectionState,
+        iceConnectionState: this.pc?.iceConnectionState,
+        signalingState: this.pc?.signalingState
+      },
+      localStream: {
+        exists: !!this.localStream,
+        tracks: this.localStream?.getTracks().length || 0
+      },
+      timestamp: new Date().toISOString()
+    }
+    console.log('🔍 SENDER CONNECTION STATUS:', status)
+    return status
   }
 
   getStats() {
@@ -428,4 +562,10 @@ class ScreenSender {
   }
 }
 
-export default ScreenSender
+// Export for both ES6 modules and CommonJS
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ScreenSender };
+}
+
+export default ScreenSender;
+export { ScreenSender };

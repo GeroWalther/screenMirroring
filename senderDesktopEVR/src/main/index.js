@@ -75,44 +75,33 @@ const createTray = () => {
 const updateTrayMenu = () => {
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: isStreaming ? `📺 Connected to ${connectedTV?.name || 'TV'}` : '📱 Screen Mirror',
+      label: isStreaming ? '📺 Screen Mirror - Connected' : '📱 Screen Mirror',
       enabled: false
     },
     { type: 'separator' },
 
-    // Connection status and disconnect option
-    ...(isStreaming
-      ? [
-          {
-            label: '🔴 Disconnect',
-            click: () => {
-              disconnectFromTV()
-            }
-          },
-          { type: 'separator' }
-        ]
-      : []),
-
-    // Available TVs submenu
+    // Main action
     {
-      label: '📺 Connect to...',
-      enabled: !isStreaming,
-      submenu: availableTVs.map((tv) => ({
-        label: `${tv.name} (${tv.ip})`,
-        click: () => {
-          connectToTV(tv)
+      label: isStreaming ? '🔴 Stop Sharing' : '🚀 Start Screen Sharing',
+      click: () => {
+        if (isStreaming) {
+          disconnectFromTV()
+        } else {
+          createWindow()
         }
-      }))
+      }
     },
 
     { type: 'separator' },
 
-    // Settings and controls
+    // Quick info
     {
-      label: '⚙️ Settings',
-      click: () => {
-        createWindow()
-      }
+      label: 'Room: living-room',
+      enabled: false
+    },
+    {
+      label: 'Server: 192.168.0.25:8080',
+      enabled: false
     },
 
     { type: 'separator' },
@@ -299,9 +288,15 @@ const discoverTVs = () => {
 }
 
 function createWindow() {
+  console.log('🖼️ Creating main window...')
   // Prevent multiple windows
   if (mainWindow && !mainWindow.isDestroyed()) {
+    console.log('🖼️ Main window already exists, focusing...')
+    mainWindow.show() // Ensure it's visible
     mainWindow.focus()
+    mainWindow.center() // Center on screen
+    mainWindow.setAlwaysOnTop(true) // Bring to front
+    setTimeout(() => mainWindow.setAlwaysOnTop(false), 1000) // Remove always on top after 1s
     return
   }
 
@@ -310,7 +305,7 @@ function createWindow() {
     width: 900,
     height: 670,
     title: 'Screen Mirror - Settings',
-    show: false,
+    show: true,
     autoHideMenuBar: true,
     resizable: true,
     minimizable: true,
@@ -321,12 +316,25 @@ function createWindow() {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false, // Required for getDisplayMedia
+      allowRunningInsecureContent: true, // Allow screen capture
+      experimentalFeatures: true, // Enable experimental web APIs
+      enableRemoteModule: false
     }
   })
 
+  console.log('🖼️ Main window created successfully')
+
   mainWindow.on('ready-to-show', () => {
+    console.log('🖼️ Main window ready to show')
     mainWindow.show()
+    
+    // Auto-open DevTools in development
+    if (is.dev) {
+      console.log('🔧 Opening DevTools for debugging')
+      mainWindow.webContents.openDevTools()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -388,6 +396,32 @@ ipcMain.on('streaming-stopped', () => {
 ipcMain.handle('get-local-ip', () => {
   return getLocalIPAddress()
 })
+
+// Get desktop sources for screen capture
+ipcMain.handle('get-desktop-sources', async () => {
+  const { desktopCapturer } = require('electron')
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: { width: 300, height: 200 }
+    })
+    console.log('📺 Found', sources.length, 'desktop sources')
+    return sources.map(source => ({
+      id: source.id,
+      name: source.name,
+      thumbnail: source.thumbnail.toDataURL()
+    }))
+  } catch (error) {
+    console.error('Failed to get desktop sources:', error)
+    throw error
+  }
+})
+
+// Enable screen capture command line switches
+app.commandLine.appendSwitch('enable-media-stream')
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing')
+app.commandLine.appendSwitch('allow-http-screen-capture')
+app.commandLine.appendSwitch('disable-web-security') // Allow getDisplayMedia
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

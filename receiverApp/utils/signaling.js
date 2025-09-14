@@ -26,25 +26,39 @@ export class SignalingClient {
   }
 
   connect() {
+    const connectionId = Math.random().toString(36).substr(2, 9);
+    console.log('🔗 RECEIVER CONNECT START - ID:', connectionId, 'URL:', this.url);
+    console.log('🔗 Current state - isConnecting:', this.isConnecting, 'ws exists:', !!this.ws, 'readyState:', this.ws?.readyState);
+    
     if (
       this.isConnecting ||
       (this.ws && this.ws.readyState === WebSocket.OPEN)
     ) {
+      console.log('⚠️ RECEIVER - Skipping connect, already connecting or connected');
       return;
     }
 
     this.isConnecting = true;
+    console.log('🔗 RECEIVER - Setting isConnecting = true');
 
     try {
+      console.log('🔗 RECEIVER - Creating WebSocket to:', this.url);
       this.ws = new WebSocket(this.url);
+      console.log('🔗 RECEIVER - WebSocket created, readyState:', this.ws.readyState);
 
       this.ws.onopen = () => {
-        console.log('📡 WebSocket connected');
+        console.log('✅ RECEIVER WS CONNECTED - URL:', this.url);
+        console.log('✅ WebSocket readyState:', this.ws.readyState, '(should be', WebSocket.OPEN, ')');
         this.isConnecting = false;
         this.retryDelay = 1000; // Reset delay on successful connection
+        
+        const wasReconnecting = this.retryCount > 0;
         this.retryCount = 0;
-
-        if (this.retryCount > 0) {
+        
+        console.log('📡 RECEIVER - Calling onOpen handler');
+        
+        if (wasReconnecting) {
+          console.log('✅ RECEIVER - This was a reconnection');
           this.onReconnected();
         }
         this.onOpen();
@@ -55,17 +69,33 @@ export class SignalingClient {
       };
 
       this.ws.onclose = (event) => {
-        console.log('📡 WebSocket closed:', event.code, event.reason);
+        console.log('📴 RECEIVER WS CLOSED - Code:', event.code, 'Reason:', event.reason, 'Clean:', event.wasClean);
+        console.log('📴 Close event details:', {
+          url: this.url,
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+          shouldReconnect: this.shouldReconnect
+        });
         this.isConnecting = false;
         this.onClose(event);
 
         if (this.shouldReconnect) {
+          console.log('🔄 RECEIVER - Will attempt reconnection');
           this.scheduleReconnect();
+        } else {
+          console.log('⚠️ RECEIVER - No reconnection (shouldReconnect = false)');
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
+        console.error('❌ RECEIVER WS ERROR:', error);
+        console.error('❌ Error details:', {
+          url: this.url,
+          readyState: this.ws?.readyState,
+          isConnecting: this.isConnecting,
+          error: error
+        });
         this.isConnecting = false;
         this.onError(error);
       };
@@ -107,11 +137,26 @@ export class SignalingClient {
   }
 
   send(data) {
+    console.log('📨 RECEIVER WS SEND - Message:', data);
+    console.log('📨 WebSocket state:', {
+      exists: !!this.ws,
+      readyState: this.ws?.readyState,
+      expectedOpen: WebSocket.OPEN
+    });
+    
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(typeof data === 'string' ? data : JSON.stringify(data));
+      const payload = typeof data === 'string' ? data : JSON.stringify(data);
+      console.log('📨 RECEIVER - Sending payload:', payload);
+      this.ws.send(payload);
+      console.log('✅ RECEIVER - Message sent successfully');
       return true;
     }
-    console.warn('⚠️ WebSocket not connected, message not sent:', data);
+    console.error('❌ RECEIVER - Cannot send message, WebSocket not connected:', {
+      data: data,
+      wsExists: !!this.ws,
+      readyState: this.ws?.readyState,
+      expectedState: WebSocket.OPEN
+    });
     return false;
   }
 
@@ -145,15 +190,21 @@ export function createWebRTCSignaling(url, options = {}) {
     ...clientOptions,
     onOpen: () => {
       console.log(`📺 ${role} connected to signaling server`);
+      console.log(`📱 ${role} about to join room:`, room, 'as role:', role.toLowerCase());
       onStatusChange?.('connected');
       
       // Join room immediately after connection
       if (room) {
-        client.send({
+        const joinMessage = {
           type: 'join',
           room: room,
           role: role.toLowerCase()
-        });
+        };
+        console.log(`📱 ${role} - Sending join message:`, joinMessage);
+        const sent = client.send(joinMessage);
+        console.log(`📱 ${role} - Join message sent:`, sent);
+      } else {
+        console.warn(`⚠️ ${role} - No room specified for joining`);
       }
     },
     onMessage: (event) => {

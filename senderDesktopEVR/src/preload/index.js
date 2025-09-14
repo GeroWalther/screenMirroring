@@ -16,6 +16,9 @@ const api = {
   // Network utilities
   getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
 
+  // Screen capture utilities
+  getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
+
   // Event listeners
   onAutoConnect: (callback) => ipcRenderer.on('auto-connect', callback),
   onDisconnect: (callback) => ipcRenderer.on('disconnect', callback),

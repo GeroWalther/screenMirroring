@@ -39,7 +39,7 @@ const config = {
 
   // Local network configuration (for office/home deployment)
   local: {
-    signalingServer: 'ws://192.168.1.100:8080', // Update with your local IP
+    signalingServer: 'ws://192.168.0.25:8080', // Your actual local IP
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
   },
 };

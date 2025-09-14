@@ -3,6 +3,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Ensure body and html have proper styling */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+}
+
 /* Custom component classes using Tailwind utilities */
 @layer components {
   .app {
