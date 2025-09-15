@@ -1,7 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { Bonjour } from 'bonjour-service'
 import { networkInterfaces } from 'os'
 import icon from '../../resources/icon.png?asset'
 
@@ -13,12 +12,8 @@ if (require('electron-squirrel-startup')) {
 let tray = null
 let mainWindow = null
 let isStreaming = false
-let connectedTV = null
-let availableTVs = []
-
-// mDNS discovery
-let bonjour = null
-let browser = null
+let currentRoom = 'living-room'
+let signalingServerPort = 8080
 
 // Get local IP address
 const getLocalIPAddress = () => {
@@ -47,6 +42,13 @@ const getLocalIPAddress = () => {
   return fallback
 }
 
+// Generate stream URL for sharing
+const getStreamURL = () => {
+  const localIP = getLocalIPAddress()
+  const streamPort = 8082 // Your working stream server port
+  return `http://${localIP}:${streamPort}/web-receiver.html?room=${currentRoom}`
+}
+
 const createTray = () => {
   try {
     console.log('Creating system tray...')
@@ -73,38 +75,56 @@ const createTray = () => {
 }
 
 const updateTrayMenu = () => {
+  const streamURL = getStreamURL()
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: isStreaming ? '📺 Screen Mirror - Connected' : '📱 Screen Mirror',
+      label: isStreaming ? '📺 Screen Mirror - Sharing' : '📱 Screen Mirror',
       enabled: false
     },
     { type: 'separator' },
 
     // Main action
     {
-      label: isStreaming ? '🔴 Stop Sharing' : '🚀 Start Screen Sharing',
+      label: isStreaming ? '🔴 Stop Sharing' : '🚀 Share Screen',
       click: () => {
         if (isStreaming) {
-          disconnectFromTV()
+          stopSharing()
         } else {
-          createWindow()
+          startSharing()
         }
       }
     },
 
     { type: 'separator' },
 
-    // Quick info
+    // Stream URL info when sharing
+    ...(isStreaming ? [
+      {
+        label: '📺 Stream URL:',
+        enabled: false
+      },
+      {
+        label: streamURL,
+        click: () => {
+          // Copy to clipboard and open in browser
+          shell.writeTextToClipboard(streamURL)
+          shell.openExternal(streamURL)
+        }
+      },
+      { type: 'separator' }
+    ] : []),
+
+    // Room info
     {
-      label: 'Room: living-room',
-      enabled: false
-    },
-    {
-      label: 'Server: 192.168.0.25:8080',
+      label: `Room: ${currentRoom}`,
       enabled: false
     },
 
     { type: 'separator' },
+    {
+      label: '⚙️ Settings',
+      click: () => createWindow()
+    },
     {
       label: '❌ Quit',
       click: () => {
@@ -116,13 +136,12 @@ const updateTrayMenu = () => {
   tray.setContextMenu(contextMenu)
 }
 
-const connectToTV = async (tv) => {
+const startSharing = async () => {
   try {
-    console.log(`Connecting to ${tv.name} at ${tv.ip}...`)
+    console.log('🚀 Starting screen sharing...')
 
     // Update status
     isStreaming = true
-    connectedTV = tv
     updateTrayMenu()
 
     // Create settings window if it doesn't exist
@@ -130,160 +149,57 @@ const connectToTV = async (tv) => {
       createWindow()
     }
 
-    // Send connection details to renderer
+    // Send start sharing signal to renderer
     mainWindow.webContents.once('dom-ready', () => {
-      mainWindow.webContents.send('auto-connect', {
-        room: tv.room,
-        serverUrl: `ws://${tv.ip}:8080`
+      const localIP = getLocalIPAddress()
+      mainWindow.webContents.send('start-sharing', {
+        room: currentRoom,
+        serverUrl: `ws://${localIP}:${signalingServerPort}`,
+        streamUrl: getStreamURL()
       })
     })
 
     if (tray) {
+      const streamURL = getStreamURL()
       tray.displayBalloon({
         title: 'Screen Mirror',
-        content: `Connecting to ${tv.name}...`,
+        content: `Sharing started! Stream URL: ${streamURL}`,
         icon: nativeImage.createFromNamedImage('NSComputer')
       })
     }
   } catch (error) {
-    console.error('Failed to connect:', error)
+    console.error('Failed to start sharing:', error)
     isStreaming = false
-    connectedTV = null
     updateTrayMenu()
 
     if (tray) {
       tray.displayBalloon({
-        title: 'Connection Failed',
-        content: `Could not connect to ${tv.name}`,
+        title: 'Sharing Failed',
+        content: 'Could not start screen sharing',
         icon: nativeImage.createFromNamedImage('NSCaution')
       })
     }
   }
 }
 
-const disconnectFromTV = () => {
-  console.log(`Disconnecting from ${connectedTV?.name}...`)
+const stopSharing = () => {
+  console.log('🔴 Stopping screen sharing...')
 
-  // Send disconnect signal to renderer
+  // Send stop sharing signal to renderer
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('disconnect')
+    mainWindow.webContents.send('stop-sharing')
   }
 
   // Update status
   isStreaming = false
-  connectedTV = null
   updateTrayMenu()
 
   if (tray) {
     tray.displayBalloon({
       title: 'Screen Mirror',
-      content: 'Disconnected from TV',
+      content: 'Screen sharing stopped',
       icon: nativeImage.createFromNamedImage('NSComputer')
     })
-  }
-}
-
-const initializeMDNS = () => {
-  try {
-    bonjour = new Bonjour()
-    console.log('mDNS initialized')
-  } catch (error) {
-    console.error('Failed to initialize mDNS:', error)
-  }
-}
-
-const discoverTVs = () => {
-  console.log('🔍 Starting TV discovery via mDNS...')
-
-  if (!bonjour) {
-    console.log('Initializing mDNS...')
-    initializeMDNS()
-  }
-
-  if (tray) {
-    tray.displayBalloon({
-      title: 'Discovering TVs',
-      content: 'Scanning for available TVs...',
-      icon: nativeImage.createFromNamedImage('NSNetwork')
-    })
-  }
-
-  // Clear existing discovered TVs
-  const discoveredTVs = []
-
-  if (bonjour) {
-    console.log('🔎 Browsing for screen mirror services...')
-
-    // Browse for screen mirror services
-    browser = bonjour.find({ type: 'screenmirror' }, (service) => {
-      console.log('📺 Found TV service:', service)
-
-      const tv = {
-        name: service.name || `TV at ${service.host}`,
-        ip: service.referer?.address || service.host,
-        port: service.port || 8080,
-        room: service.txt?.room || 'default',
-        type: service.type
-      }
-
-      console.log('📺 Processed TV:', tv)
-
-      // Avoid duplicates
-      if (!discoveredTVs.find((t) => t.ip === tv.ip)) {
-        discoveredTVs.push(tv)
-        console.log('✅ Added TV to discovery list:', tv.name)
-      } else {
-        console.log('⚠️ Duplicate TV found, skipping:', tv.name)
-      }
-    })
-
-    // Stop discovery after 8 seconds
-    setTimeout(() => {
-      if (browser) {
-        browser.stop()
-        browser = null
-        console.log('🔍 TV discovery stopped')
-      }
-
-      // Update available TVs with discovered ones
-      availableTVs = discoveredTVs
-      console.log('📺 Available TVs updated:', availableTVs)
-
-      updateTrayMenu()
-
-      // Notify renderer about discovered TVs
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tvs-discovered', discoveredTVs)
-      }
-
-      if (tray) {
-        tray.displayBalloon({
-          title: 'Discovery Complete',
-          content: `Found ${discoveredTVs.length} TVs on network`,
-          icon: nativeImage.createFromNamedImage('NSComputer')
-        })
-      }
-
-      console.log('✅ TV discovery completed, found:', discoveredTVs.length, 'TVs')
-    }, 8000)
-  } else {
-    console.error('❌ mDNS not available, cannot discover TVs')
-    setTimeout(() => {
-      updateTrayMenu()
-
-      // Notify renderer that no TVs were found
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tvs-discovered', [])
-      }
-
-      if (tray) {
-        tray.displayBalloon({
-          title: 'Discovery Failed',
-          content: 'mDNS not available - use manual connection',
-          icon: nativeImage.createFromNamedImage('NSCaution')
-        })
-      }
-    }, 2000)
   }
 }
 
@@ -365,15 +281,18 @@ function createWindow() {
 
 // IPC handlers
 ipcMain.on('connect-to-tv', (event, tvInfo) => {
-  connectToTV(tvInfo)
+  console.log('Legacy connect-to-tv - using startSharing instead')
+  startSharing()
 })
 
 ipcMain.on('disconnect', () => {
-  disconnectFromTV()
+  console.log('Legacy disconnect - using stopSharing instead')
+  stopSharing()
 })
 
+// mDNS discovery removed - now using simple share/stop model
 ipcMain.on('discover-tvs', () => {
-  discoverTVs()
+  console.log('TV discovery disabled - using direct streaming model')
 })
 
 ipcMain.on('update-quality', (event, settings) => {
@@ -437,9 +356,6 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
-
-  // Initialize mDNS
-  initializeMDNS()
 
   // Create tray
   createTray()

@@ -209,7 +209,46 @@ export const useScreenSender = () => {
     return stats
   }
 
-  // Listen for auto-connect events from main process
+  // Listen for start sharing events from main process
+  useEffect(() => {
+    if (window.api?.onStartSharing) {
+      const handleStartSharing = (event, data) => {
+        console.log('🚀 Start sharing requested from tray menu:', data)
+        startSharing({
+          room: data.room,
+          serverUrl: data.serverUrl
+        })
+      }
+
+      window.api.onStartSharing(handleStartSharing)
+
+      return () => {
+        if (window.api?.removeAllListeners) {
+          window.api.removeAllListeners('start-sharing')
+        }
+      }
+    }
+  }, [startSharing])
+
+  // Listen for stop sharing events from main process
+  useEffect(() => {
+    if (window.api?.onStopSharing) {
+      const handleStopSharing = () => {
+        console.log('🔴 Stop sharing requested from main process')
+        stopSharing()
+      }
+
+      window.api.onStopSharing(handleStopSharing)
+
+      return () => {
+        if (window.api?.removeAllListeners) {
+          window.api.removeAllListeners('stop-sharing')
+        }
+      }
+    }
+  }, [stopSharing])
+
+  // Listen for auto-connect events (legacy support)
   useEffect(() => {
     if (window.api?.onAutoConnect) {
       const handleAutoConnect = (event, data) => {
@@ -229,24 +268,6 @@ export const useScreenSender = () => {
       }
     }
   }, [startSharing])
-
-  // Listen for disconnect events from main process
-  useEffect(() => {
-    if (window.api?.onDisconnect) {
-      const handleDisconnect = () => {
-        console.log('Disconnect requested from main process')
-        stopSharing()
-      }
-
-      window.api.onDisconnect(handleDisconnect)
-
-      return () => {
-        if (window.api?.removeAllListeners) {
-          window.api.removeAllListeners('disconnect')
-        }
-      }
-    }
-  }, [stopSharing])
 
   // Get local IP address on mount
   useEffect(() => {

@@ -6,14 +6,16 @@
 class ScreenSender {
   constructor(options = {}) {
     // Auto-detect local network IP for signaling server
-    const LOCAL_IP = '192.168.0.25'; // Your Mac's IP address
+    const LOCAL_IP = '192.168.0.26'; // Your Mac's IP address
     this.signalingUrl = options.signalingUrl || `ws://${LOCAL_IP}:8080`
     this.room = options.room || 'living-room' // Match receiver default room
     this.iceServers = options.iceServers || [
-      // Google's free STUN servers
+      // Enhanced STUN servers for better Android TV connectivity
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
       // Add TURN servers for production (replace with your own)
       // { urls: 'turn:your-turn-server.com:3478', username: 'user', credential: 'pass' },
       // { urls: 'turns:your-turn-server.com:5349', username: 'user', credential: 'pass' }
@@ -325,16 +327,20 @@ class ScreenSender {
       
       console.log('Using source:', primaryScreen.name)
       
-      // Create constraints for getUserMedia with the desktop source
+      // Create constraints for getUserMedia with Android TV compatibility
+      console.log('📺 Using Android TV-optimized video constraints');
       const constraints = {
         audio: false, // Desktop audio capture is complex in Electron
         video: {
           mandatory: {
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: primaryScreen.id,
-            maxFrameRate: 30,
-            maxWidth: 1920,
-            maxHeight: 1080
+            maxFrameRate: 15,    // Reduced from 30 for better compatibility
+            minFrameRate: 10,    // Minimum frame rate
+            maxWidth: 1280,      // Reduced from 1920 (720p width)
+            maxHeight: 720,      // Reduced from 1080 (720p height)
+            minWidth: 640,       // Minimum width
+            minHeight: 360       // Minimum height
           }
         }
       }
@@ -382,10 +388,16 @@ class ScreenSender {
     try {
       const offer = await this.pc.createOffer()
 
-      // Prefer H.264 for better Android TV compatibility
-      offer.sdp = this.preferH264(offer.sdp)
+      // Android TV optimization - let WebRTC choose best codec (often VP8 by default)
+      console.log('📺 Using default codec selection for Android TV compatibility');
+      // Temporarily disabled: offer.sdp = this.forceVP8ForAndroidTV(offer.sdp)
 
       await this.pc.setLocalDescription(offer)
+      
+      // Set Android TV-friendly encoding parameters after setting local description
+      setTimeout(() => {
+        this.setAndroidTVEncodingParameters()
+      }, 100)
 
       // Send offer to receiver
       this.signalingClient.send({
@@ -395,7 +407,7 @@ class ScreenSender {
         data: { sdp: this.pc.localDescription }
       })
 
-      console.log('Offer created and sent')
+      console.log('Android TV-optimized offer created and sent')
     } catch (error) {
       console.error('Failed to create offer:', error)
       throw error
@@ -422,35 +434,74 @@ class ScreenSender {
     }
   }
 
-  // Prefer H.264 codec for better Android TV compatibility
-  preferH264(sdp) {
-    const lines = sdp.split('\n')
-    const videoMLineIndex = lines.findIndex((line) => line.startsWith('m=video'))
-
-    if (videoMLineIndex === -1) return sdp
-
-    const videoMLine = lines[videoMLineIndex]
-    const h264PayloadTypes = []
-
-    // Find H.264 payload types
-    lines.forEach((line) => {
-      if (line.includes('H264') || line.includes('h264')) {
-        const match = line.match(/a=rtpmap:(\d+)/)
-        if (match) {
-          h264PayloadTypes.push(match[1])
+  // Simple VP8 codec preference - safer approach
+  forceVP8ForAndroidTV(sdp) {
+    console.log('📺 Applying VP8 preference for Android TV compatibility');
+    
+    // Simple approach: just reorder VP8 before H.264 in the m= line
+    const lines = sdp.split('\n');
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Find the m=video line
+      if (line.startsWith('m=video ')) {
+        console.log('📺 Original m=video line:', line);
+        
+        // Extract payload types
+        const parts = line.split(' ');
+        if (parts.length > 3) {
+          const port = parts[1];
+          const protocol = parts[2];
+          const payloads = parts.slice(3);
+          
+          // Find VP8 payload type (usually 96)
+          const vp8Payloads = [];
+          const otherPayloads = [];
+          
+          // Check rtpmap lines to identify VP8
+          payloads.forEach(payload => {
+            // Look ahead to find corresponding rtpmap
+            const rtpmapLine = lines.find(l => l.startsWith(`a=rtpmap:${payload} VP8`));
+            if (rtpmapLine) {
+              vp8Payloads.push(payload);
+              console.log('📺 Found VP8 payload:', payload);
+            } else {
+              otherPayloads.push(payload);
+            }
+          });
+          
+          // Reorder: VP8 first, then others
+          if (vp8Payloads.length > 0) {
+            const reorderedPayloads = vp8Payloads.concat(otherPayloads);
+            const newMLine = `m=video ${port} ${protocol} ${reorderedPayloads.join(' ')}`;
+            lines[i] = newMLine;
+            console.log('📺 Updated m=video line:', newMLine);
+            console.log('📺 VP8 now prioritized');
+          } else {
+            console.warn('⚠️ VP8 not found, keeping original order');
+          }
         }
+        break;
       }
-    })
-
-    if (h264PayloadTypes.length > 0) {
-      // Reorder payload types to prefer H.264
-      const parts = videoMLine.split(' ')
-      const otherPayloads = parts.slice(3).filter((pt) => !h264PayloadTypes.includes(pt))
-      const newMLine = parts.slice(0, 3).concat(h264PayloadTypes, otherPayloads).join(' ')
-      lines[videoMLineIndex] = newMLine
     }
-
-    return lines.join('\n')
+    
+    return lines.join('\n');
+  }
+  
+  // Set Android TV-optimized encoding parameters
+  async setAndroidTVEncodingParameters() {
+    console.log('📺 Setting Android TV-optimized encoding parameters');
+    try {
+      await this.setEncodingParameters({
+        maxBitrate: 2000000,        // 2 Mbps - conservative for Android TV
+        maxFramerate: 15,           // Lower frame rate for stability
+        scaleResolutionDownBy: 1.0  // Keep original resolution (already lowered)
+      });
+      console.log('📺 Android TV encoding parameters applied');
+    } catch (error) {
+      console.warn('⚠️ Could not set encoding parameters:', error.message);
+    }
   }
 
   // Set encoding parameters for better quality/performance

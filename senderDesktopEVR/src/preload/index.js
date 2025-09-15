@@ -20,6 +20,8 @@ const api = {
   getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
 
   // Event listeners
+  onStartSharing: (callback) => ipcRenderer.on('start-sharing', callback),
+  onStopSharing: (callback) => ipcRenderer.on('stop-sharing', callback),
   onAutoConnect: (callback) => ipcRenderer.on('auto-connect', callback),
   onDisconnect: (callback) => ipcRenderer.on('disconnect', callback),
   onTVsDiscovered: (callback) => ipcRenderer.on('tvs-discovered', callback),

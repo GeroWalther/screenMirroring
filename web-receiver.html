@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screen Mirror - Web Receiver</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #videoContainer {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #remoteVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: black;
+        }
+        
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 16px;
+            z-index: 1000;
+        }
+        
+        #debug {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 1000;
+            max-width: 300px;
+        }
+        
+        .status-connected { color: #4CAF50; }
+        .status-connecting { color: #FF9800; }
+        .status-error { color: #f44336; }
+    </style>
+</head>
+<body>
+    <div id="videoContainer">
+        <video id="remoteVideo" autoplay playsinline muted></video>
+    </div>
+    
+    <div id="status" class="status-connecting">🔄 Connecting to signaling server...</div>
+    
+    <div id="debug">
+        <div>🌐 Web Browser WebRTC Receiver</div>
+        <div>Server: ws://192.168.0.26:8080</div>
+        <div>Room: living-room</div>
+        <div id="debugInfo">Initializing...</div>
+    </div>
+
+    <script>
+        // Configuration
+        const SIGNALING_URL = 'ws://192.168.0.26:8080';
+        const ROOM_NAME = 'living-room';
+        
+        // ICE servers
+        const iceServers = [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' }
+        ];
+
+        // Elements
+        const statusEl = document.getElementById('status');
+        const debugEl = document.getElementById('debugInfo');
+        const videoEl = document.getElementById('remoteVideo');
+
+        // WebRTC and WebSocket
+        let pc = null;
+        let ws = null;
+
+        function updateStatus(message, className = 'status-connecting') {
+            statusEl.textContent = message;
+            statusEl.className = className;
+            console.log('Status:', message);
+        }
+
+        function updateDebug(message) {
+            debugEl.innerHTML = message;
+            console.log('Debug:', message);
+        }
+
+        function createPeerConnection() {
+            pc = new RTCPeerConnection({ iceServers });
+            
+            pc.onicecandidate = (event) => {
+                if (event.candidate && ws.readyState === WebSocket.OPEN) {
+                    sendSignal({ ice: event.candidate });
+                }
+            };
+
+            pc.ontrack = (event) => {
+                console.log('🎥 Remote track received:', event.track.kind);
+                updateDebug(`Track: ${event.track.kind}<br>Stream: ${event.streams[0]?.id}`);
+                
+                if (event.streams && event.streams.length > 0) {
+                    videoEl.srcObject = event.streams[0];
+                    updateStatus('📺 Receiving video stream', 'status-connected');
+                }
+            };
+
+            pc.onconnectionstatechange = () => {
+                console.log('WebRTC connection state:', pc.connectionState);
+                updateDebug(`WebRTC: ${pc.connectionState}<br>ICE: ${pc.iceConnectionState}`);
+                
+                if (pc.connectionState === 'connected') {
+                    updateStatus('✅ Connected - Streaming', 'status-connected');
+                } else if (pc.connectionState === 'failed') {
+                    updateStatus('❌ Connection failed', 'status-error');
+                }
+            };
+        }
+
+        function sendSignal(data) {
+            if (ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'signal',
+                    room: ROOM_NAME,
+                    to: 'offerer',
+                    data: data
+                };
+                ws.send(JSON.stringify(message));
+            }
+        }
+
+        async function handleOffer(offer) {
+            console.log('📨 Received offer');
+            updateStatus('🔧 Processing offer...', 'status-connecting');
+            
+            try {
+                await pc.setRemoteDescription(offer);
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                
+                sendSignal({ sdp: pc.localDescription });
+                console.log('✅ Answer sent');
+                updateStatus('📤 Answer sent, establishing connection...', 'status-connecting');
+            } catch (error) {
+                console.error('❌ Error handling offer:', error);
+                updateStatus('❌ Failed to process offer', 'status-error');
+            }
+        }
+
+        function connectWebSocket() {
+            updateStatus('🔄 Connecting to signaling server...', 'status-connecting');
+            
+            ws = new WebSocket(SIGNALING_URL);
+
+            ws.onopen = () => {
+                console.log('✅ WebSocket connected');
+                updateStatus('📡 Joining room as answerer...', 'status-connecting');
+                
+                // Join room as answerer
+                ws.send(JSON.stringify({
+                    type: 'join',
+                    role: 'answerer',
+                    room: ROOM_NAME
+                }));
+            };
+
+            ws.onmessage = async (event) => {
+                const message = JSON.parse(event.data);
+                console.log('📨 Received:', message.type);
+
+                if (message.type === 'signal' && message.data) {
+                    const data = message.data;
+                    
+                    if (data.sdp && data.sdp.type === 'offer') {
+                        await handleOffer(data.sdp);
+                    } else if (data.ice) {
+                        try {
+                            await pc.addIceCandidate(data.ice);
+                            console.log('🧊 ICE candidate added');
+                        } catch (error) {
+                            console.warn('⚠️ ICE candidate error:', error);
+                        }
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                console.log('📴 WebSocket disconnected');
+                updateStatus('📴 Disconnected - Will retry in 3s', 'status-error');
+                setTimeout(connectWebSocket, 3000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket error:', error);
+                updateStatus('❌ Connection error', 'status-error');
+            };
+        }
+
+        // Initialize
+        function init() {
+            console.log('🚀 Initializing Web Browser WebRTC Receiver');
+            updateDebug('Initializing WebRTC...');
+            
+            createPeerConnection();
+            connectWebSocket();
+        }
+
+        // Start when page loads
+        init();
+    </script>
+</body>
+</html>
