@@ -45,7 +45,7 @@ const getLocalIPAddress = () => {
 // Generate stream URL for sharing
 const getStreamURL = () => {
   const localIP = getLocalIPAddress()
-  const streamPort = 8082 // Your working stream server port
+  const streamPort = 8080 // Your working stream server port
   return `http://${localIP}:${streamPort}/web-receiver.html?room=${currentRoom}`
 }
 
@@ -98,21 +98,23 @@ const updateTrayMenu = () => {
     { type: 'separator' },
 
     // Stream URL info when sharing
-    ...(isStreaming ? [
-      {
-        label: '📺 Stream URL:',
-        enabled: false
-      },
-      {
-        label: streamURL,
-        click: () => {
-          // Copy to clipboard and open in browser
-          shell.writeTextToClipboard(streamURL)
-          shell.openExternal(streamURL)
-        }
-      },
-      { type: 'separator' }
-    ] : []),
+    ...(isStreaming
+      ? [
+          {
+            label: '📺 Stream URL:',
+            enabled: false
+          },
+          {
+            label: streamURL,
+            click: () => {
+              // Copy to clipboard and open in browser
+              shell.writeTextToClipboard(streamURL)
+              shell.openExternal(streamURL)
+            }
+          },
+          { type: 'separator' }
+        ]
+      : []),
 
     // Room info
     {
@@ -245,7 +247,7 @@ function createWindow() {
   mainWindow.on('ready-to-show', () => {
     console.log('🖼️ Main window ready to show')
     mainWindow.show()
-    
+
     // Auto-open DevTools in development
     if (is.dev) {
       console.log('🔧 Opening DevTools for debugging')
@@ -325,7 +327,7 @@ ipcMain.handle('get-desktop-sources', async () => {
       thumbnailSize: { width: 300, height: 200 }
     })
     console.log('📺 Found', sources.length, 'screen sources')
-    
+
     // Sort sources to prioritize primary display
     const sortedSources = sources.sort((a, b) => {
       // Put "Entire screen" or "Screen 1" first
@@ -333,8 +335,8 @@ ipcMain.handle('get-desktop-sources', async () => {
       if (b.name.includes('Entire screen') || b.name.includes('Screen 1')) return 1
       return 0
     })
-    
-    return sortedSources.map(source => ({
+
+    return sortedSources.map((source) => ({
       id: source.id,
       name: source.name,
       thumbnail: source.thumbnail.toDataURL()

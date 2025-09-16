@@ -16,7 +16,7 @@ interface ConnectionState {
 // Use your existing working web receiver URL
 const getWebViewURL = () => {
   const LOCAL_IP = '192.168.0.26'; // Your Mac's IP address
-  const WEB_PORT = '8082'; // Your web receiver port
+  const WEB_PORT = '8080'; // Your web receiver port
   
   // Use your existing working web receiver URL
   const baseURL = __DEV__ 

@@ -19,7 +19,7 @@ function ScreenMirrorApp() {
   useEffect(() => {
     // Get local IP
     if (window.api?.getLocalIP) {
-      window.api.getLocalIP().then(ip => {
+      window.api.getLocalIP().then((ip) => {
         setLocalIP(ip)
       })
     }
@@ -47,7 +47,7 @@ function ScreenMirrorApp() {
   const updateStatus = (state, msg) => {
     setStatus(state)
     setMessage(msg)
-    
+
     if (state === 'streaming') {
       setIsConnected(true)
     } else if (state === 'disconnected' || state === 'error') {
@@ -97,7 +97,7 @@ function ScreenMirrorApp() {
         room: room,
         onStatusChange: (status, data) => {
           console.log('📊 Status:', status, data)
-          
+
           switch (status) {
             case 'starting':
               updateStatus('connecting', 'Starting screen capture...')
@@ -135,23 +135,22 @@ function ScreenMirrorApp() {
       })
 
       setScreenSender(sender)
-      
+
       // Store globally for debugging
       window.debugSender = sender
       console.log('🔍 DEBUG: Sender stored globally as window.debugSender')
-      
+
       // Start periodic status logging
       const statusInterval = setInterval(() => {
         if (sender && sender.getConnectionStatus) {
           sender.getConnectionStatus()
         }
       }, 5000)
-      
+
       // Store interval for cleanup
       sender._debugInterval = statusInterval
-      
+
       await sender.start()
-      
     } catch (error) {
       console.error('❌ Failed to start screen sharing:', error)
       updateStatus('error', error.message || 'Failed to start screen sharing')
@@ -164,22 +163,32 @@ function ScreenMirrorApp() {
 
   const getStatusColor = () => {
     switch (status) {
-      case 'connected': return 'text-green-600 bg-green-50'
-      case 'connecting': return 'text-orange-600 bg-orange-50'
-      case 'streaming': return 'text-blue-600 bg-blue-50'
-      case 'error': return 'text-red-600 bg-red-50'
-      default: return 'text-gray-600 bg-gray-50'
+      case 'connected':
+        return 'text-green-600 bg-green-50'
+      case 'connecting':
+        return 'text-orange-600 bg-orange-50'
+      case 'streaming':
+        return 'text-blue-600 bg-blue-50'
+      case 'error':
+        return 'text-red-600 bg-red-50'
+      default:
+        return 'text-gray-600 bg-gray-50'
     }
   }
 
   const getStatusDot = () => {
-    const baseClass = "w-2 h-2 rounded-full mr-2"
+    const baseClass = 'w-2 h-2 rounded-full mr-2'
     switch (status) {
-      case 'connected': return `${baseClass} bg-green-500`
-      case 'connecting': return `${baseClass} bg-orange-500 animate-pulse`
-      case 'streaming': return `${baseClass} bg-blue-500`
-      case 'error': return `${baseClass} bg-red-500`
-      default: return `${baseClass} bg-gray-400`
+      case 'connected':
+        return `${baseClass} bg-green-500`
+      case 'connecting':
+        return `${baseClass} bg-orange-500 animate-pulse`
+      case 'streaming':
+        return `${baseClass} bg-blue-500`
+      case 'error':
+        return `${baseClass} bg-red-500`
+      default:
+        return `${baseClass} bg-gray-400`
     }
   }
 
@@ -238,10 +247,15 @@ function ScreenMirrorApp() {
                   <div>
                     <h4 className="text-sm font-semibold text-gray-700 mb-3">Available TVs:</h4>
                     {discoveredTVs.map((tv, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-white rounded mb-2">
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-2 bg-white rounded mb-2"
+                      >
                         <div>
                           <div className="font-medium text-sm">{tv.name}</div>
-                          <div className="text-xs text-gray-500">{tv.ip} • {tv.room}</div>
+                          <div className="text-xs text-gray-500">
+                            {tv.ip} • {tv.room}
+                          </div>
                         </div>
                         <button
                           onClick={() => handleConnectToTV(tv)}
@@ -305,13 +319,13 @@ function ScreenMirrorApp() {
             </div>
             <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
               <div className="font-mono text-sm text-center break-all select-all">
-                http://{localIP}:8082/web-receiver.html?room={selectedRoom}
+                http://{localIP}:8080/web-receiver.html?room={selectedRoom}
               </div>
             </div>
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  const url = `http://${localIP}:8082/web-receiver.html?room=${selectedRoom}`
+                  const url = `http://${localIP}:8080/web-receiver.html?room=${selectedRoom}`
                   navigator.clipboard.writeText(url)
                   // You could add a toast notification here
                 }}
@@ -321,7 +335,7 @@ function ScreenMirrorApp() {
               </button>
               <button
                 onClick={() => {
-                  const url = `http://${localIP}:8082/web-receiver.html?room=${selectedRoom}`
+                  const url = `http://${localIP}:8080/web-receiver.html?room=${selectedRoom}`
                   window.open(url, '_blank')
                 }}
                 className="flex-1 py-2 px-4 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors"
