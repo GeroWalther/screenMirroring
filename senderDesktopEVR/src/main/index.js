@@ -321,11 +321,20 @@ ipcMain.handle('get-desktop-sources', async () => {
   const { desktopCapturer } = require('electron')
   try {
     const sources = await desktopCapturer.getSources({
-      types: ['screen', 'window'],
+      types: ['screen'], // Only get screen sources, not individual windows
       thumbnailSize: { width: 300, height: 200 }
     })
-    console.log('📺 Found', sources.length, 'desktop sources')
-    return sources.map(source => ({
+    console.log('📺 Found', sources.length, 'screen sources')
+    
+    // Sort sources to prioritize primary display
+    const sortedSources = sources.sort((a, b) => {
+      // Put "Entire screen" or "Screen 1" first
+      if (a.name.includes('Entire screen') || a.name.includes('Screen 1')) return -1
+      if (b.name.includes('Entire screen') || b.name.includes('Screen 1')) return 1
+      return 0
+    })
+    
+    return sortedSources.map(source => ({
       id: source.id,
       name: source.name,
       thumbnail: source.thumbnail.toDataURL()

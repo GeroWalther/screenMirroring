@@ -55,7 +55,8 @@ class ScreenSender {
         role: 'Sender',
         room: this.room,
         onSignal: this.handleSignal,
-        onStatusChange: this.handleStatusChange
+        onStatusChange: this.handleStatusChange,
+        isStopping: () => this.isStopping
       })
 
       // Connect to signaling server
@@ -119,12 +120,21 @@ class ScreenSender {
               url: url
             })
 
+            // Don't reconnect if we're in the process of stopping
+            if (options.isStopping && options.isStopping()) {
+              console.log('🛑 Not reconnecting - stop was requested')
+              return
+            }
+
             if (reconnectAttempts < maxReconnectAttempts) {
               reconnectAttempts++
               options.onStatusChange('reconnecting', { attempt: reconnectAttempts })
 
               setTimeout(() => {
-                this.connect()
+                // Double-check stopping flag before reconnecting
+                if (!options.isStopping || !options.isStopping()) {
+                  this.connect()
+                }
               }, reconnectDelay)
 
               reconnectDelay = Math.min(reconnectDelay * 2, 30000)
@@ -320,12 +330,21 @@ class ScreenSender {
         throw new Error('No screen sources available')
       }
       
-      // Find the primary display (usually the first screen source)
-      const primaryScreen = sources.find(source => 
-        source.name.includes('Screen') || source.name.includes('Entire screen')
-      ) || sources[0]
+      // Find the primary display - prioritize entire screen or first display
+      let primaryScreen = sources.find(source => 
+        source.name.includes('Entire screen') || 
+        source.name.includes('Screen 1') ||
+        source.name.toLowerCase().includes('main') ||
+        source.name.toLowerCase().includes('primary')
+      )
       
-      console.log('Using source:', primaryScreen.name)
+      // Fallback to first screen source if no obvious primary found
+      if (!primaryScreen) {
+        primaryScreen = sources.find(source => source.name.includes('Screen')) || sources[0]
+      }
+      
+      console.log('Using primary screen source:', primaryScreen.name)
+      console.log('Available sources:', sources.map(s => s.name))
       
       // Create constraints for getUserMedia with Android TV compatibility
       console.log('📺 Using Android TV-optimized video constraints');
@@ -571,6 +590,10 @@ class ScreenSender {
 
   stop() {
     console.log('Stopping screen sender...')
+    
+    // Mark as stopping to prevent reconnection attempts
+    this.isStopping = true
+    this.isConnected = false
 
     // Close signaling
     if (this.signalingClient) {
@@ -590,9 +613,19 @@ class ScreenSender {
       this.localStream = null
     }
 
-    this.isConnected = false
+    // Clear debug interval if it exists
+    if (this._debugInterval) {
+      clearInterval(this._debugInterval)
+      this._debugInterval = null
+    }
+
     this.updateStatus('stopped')
     this.onStreamEnded()
+    
+    // Reset stopping flag after a short delay
+    setTimeout(() => {
+      this.isStopping = false
+    }, 1000)
   }
 
   // Getters
