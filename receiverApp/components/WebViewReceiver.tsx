@@ -1,33 +1,19 @@
 /**
- * WebView-based Screen Receiver
- * Shows the web-based screen sharing interface directly in React Native
+ * WebView Screen Receiver - Clean & Minimal
+ * Simply displays the web receiver in a WebView
  */
 
 import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, StatusBar, Text, Pressable } from 'react-native';
 import { WebView } from 'react-native-webview';
-import Constants from 'expo-constants';
 
 interface ConnectionState {
   status: 'loading' | 'loaded' | 'error';
   message: string;
 }
 
-// Use your existing working web receiver URL
-const getWebViewURL = () => {
-  const LOCAL_IP = '192.168.0.26'; // Your Mac's IP address
-  const WEB_PORT = '8080'; // Your web receiver port
-  
-  // Use your existing working web receiver URL
-  const baseURL = __DEV__ 
-    ? `http://${LOCAL_IP}:${WEB_PORT}` 
-    : `https://your-signaling-server.com`;
-  
-  // Your existing web receiver page
-  return `${baseURL}/web-receiver.html`;
-};
-
-const WEB_RECEIVER_URL = getWebViewURL();
+// Web receiver URL - matches your working setup
+const WEB_RECEIVER_URL = 'http://192.168.0.26:8080/web-receiver.html?room=living-room';
 
 export default function WebViewReceiver() {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
@@ -101,36 +87,9 @@ export default function WebViewReceiver() {
     });
   };
 
-  // Handle messages from WebView (for future use)
+  // Handle messages from WebView (simplified)
   const handleMessage = (event: any) => {
-    try {
-      const data = JSON.parse(event.nativeEvent.data);
-      console.log('📨 Message from WebView:', data);
-      
-      // Handle different message types
-      switch (data.type) {
-        case 'streaming':
-          setConnectionState({
-            status: 'loaded',
-            message: 'Receiving screen share'
-          });
-          break;
-        case 'disconnected':
-          setConnectionState({
-            status: 'loaded',
-            message: 'Waiting for screen share...'
-          });
-          break;
-        case 'error':
-          setConnectionState({
-            status: 'error',
-            message: data.message || 'WebRTC error'
-          });
-          break;
-      }
-    } catch (error) {
-      console.log('📨 Non-JSON message from WebView:', event.nativeEvent.data);
-    }
+    console.log('📨 Message from WebView:', event.nativeEvent.data);
   };
 
   // Get status indicator color
@@ -182,52 +141,14 @@ export default function WebViewReceiver() {
         cacheEnabled={false}
         // Security - only needed for your local development
         originWhitelist={['*']}
-        // Inject JavaScript to communicate back to React Native
+        // Simple JavaScript injection for basic monitoring
         injectedJavaScript={`
-          (function() {
-            // Listen for WebRTC events and send status updates
-            const originalLog = console.log;
-            console.log = function(...args) {
-              originalLog.apply(console, args);
-              
-              // Send important log messages back to React Native
-              const message = args.join(' ');
-              if (message.includes('streaming') || message.includes('connected') || message.includes('error')) {
-                try {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: 'log',
-                    message: message
-                  }));
-                } catch (e) {
-                  // Ignore if ReactNativeWebView is not available
-                }
-              }
-            };
-
-            // Monitor for streaming status changes
-            let lastStreamingStatus = false;
-            setInterval(() => {
-              // Check if video element exists and has video
-              const videos = document.querySelectorAll('video');
-              const hasVideo = videos.length > 0 && Array.from(videos).some(v => v.videoWidth > 0);
-              
-              if (hasVideo !== lastStreamingStatus) {
-                lastStreamingStatus = hasVideo;
-                try {
-                  window.ReactNativeWebView.postMessage(JSON.stringify({
-                    type: hasVideo ? 'streaming' : 'disconnected',
-                    message: hasVideo ? 'Video streaming active' : 'No video stream'
-                  }));
-                } catch (e) {
-                  // Ignore if ReactNativeWebView is not available
-                }
-              }
-            }, 1000);
-          })();
+          console.log('📱 Screen Mirror Receiver App loaded');
+          true; // Required for WebView
         `}
       />
 
-      {/* Status Overlay */}
+      {/* Minimal Status Overlay */}
       {showControls && (
         <View style={styles.overlay}>
           <View style={styles.statusContainer}>
@@ -235,14 +156,7 @@ export default function WebViewReceiver() {
             <Text style={styles.overlayStatusText}>{connectionState.message}</Text>
           </View>
           
-          {/* Connection Info */}
-          <View style={styles.infoContainer}>
-            <Text style={styles.infoText}>Mode: WebView Receiver</Text>
-            <Text style={styles.infoText}>URL: {WEB_RECEIVER_URL}</Text>
-            <Text style={styles.infoText}>Status: {connectionState.status}</Text>
-          </View>
-
-          {/* Controls */}
+          {/* Simple Controls */}
           <View style={styles.controlsContainer}>
             <Pressable 
               onPress={handleRefresh}
@@ -251,23 +165,6 @@ export default function WebViewReceiver() {
             >
               <Text style={styles.controlButtonText}>🔄 Refresh</Text>
             </Pressable>
-            
-            <Pressable 
-              onPress={() => setShowControls(false)}
-              style={styles.controlButton}
-            >
-              <Text style={styles.controlButtonText}>👁️ Hide Controls</Text>
-            </Pressable>
-          </View>
-
-          {/* Instructions */}
-          <View style={styles.instructionsContainer}>
-            <Text style={styles.instructionsText}>
-              📺 WebView-based Screen Sharing
-            </Text>
-            <Text style={styles.instructionsSubText}>
-              Displaying web receiver in native app
-            </Text>
           </View>
         </View>
       )}
@@ -298,10 +195,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   
-  // Overlay Controls
+  // Minimal Overlay
   overlay: {
     position: 'absolute',
-    top: Constants.statusBarHeight + 10,
+    top: 50,
     left: 20,
     right: 20,
     zIndex: 10,
@@ -314,8 +211,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   statusDot: {
     width: 10,
@@ -330,20 +225,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   
-  // Connection Info
-  infoContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  infoText: {
-    color: '#ccc',
-    fontSize: 12,
-    marginBottom: 2,
-    fontFamily: 'monospace',
-  },
-  
   // Controls
   controlsContainer: {
     flexDirection: 'row',
@@ -355,34 +236,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   controlButtonText: {
     color: '#fff',
     fontSize: 14,
     fontWeight: 'bold',
-  },
-  
-  // Instructions
-  instructionsContainer: {
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    padding: 10,
-    borderRadius: 6,
-    alignItems: 'center',
-  },
-  instructionsText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  instructionsSubText: {
-    color: '#ccc',
-    fontSize: 11,
-    opacity: 0.8,
-    textAlign: 'center',
   },
   
   // Error Overlay
