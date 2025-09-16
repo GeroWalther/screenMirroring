@@ -24,6 +24,7 @@ export default function WebViewReceiver() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentRoom, setCurrentRoom] = useState('living-room');
   const [showRoomSelector, setShowRoomSelector] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false); // Track streaming state
   const webViewRef = useRef<WebView>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -47,8 +48,13 @@ export default function WebViewReceiver() {
     }, 8000); // Longer timeout
   };
 
-  // Handle screen tap to show/hide controls
+  // Handle screen tap to show/hide controls (only when not streaming)
   const handleScreenTap = () => {
+    // Don't show controls when streaming - pure full-screen experience
+    if (isStreaming) {
+      return;
+    }
+    
     if (showControls) {
       // Hide controls immediately
       setShowControls(false);
@@ -117,9 +123,27 @@ export default function WebViewReceiver() {
     });
   };
 
-  // Handle messages from WebView (simplified)
+  // Handle messages from WebView - detect streaming state
   const handleMessage = (event: any) => {
-    console.log('📨 Message from WebView:', event.nativeEvent.data);
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      console.log('📨 Message from WebView:', message);
+      
+      if (message.type === 'stream_state_change') {
+        setIsStreaming(message.isStreaming);
+        if (message.isStreaming) {
+          // Hide all controls when streaming starts
+          setShowControls(false);
+          setShowRoomSelector(false);
+          if (controlsTimeoutRef.current) {
+            clearTimeout(controlsTimeoutRef.current);
+            controlsTimeoutRef.current = null;
+          }
+        }
+      }
+    } catch (error) {
+      console.log('📨 WebView message (non-JSON):', event.nativeEvent.data);
+    }
   };
 
   // Get status indicator color
@@ -180,29 +204,104 @@ export default function WebViewReceiver() {
         // Network and security
         originWhitelist={['*']}
         mixedContentMode={'always'}
-        // Minimal JavaScript - no auto-refresh behavior
+        // Enhanced JavaScript for stream detection and clean UI
         injectedJavaScript={`
-          console.log('📱 Screen Mirror Receiver App loaded');
+          console.log('📱 Screen Mirror Receiver App loaded for room: ${currentRoom}');
           
-          // Just log when stream starts/stops, but don't auto-refresh
+          // Add CSS to hide ALL UI elements when streaming - comprehensive selectors
+          const style = document.createElement('style');
+          style.textContent = 
+            '.streaming-active .server-info, ' +
+            '.streaming-active .connection-status, ' +
+            '.streaming-active .status-indicator, ' +
+            '.streaming-active .room-info, ' +
+            '.streaming-active .controls, ' +
+            '.streaming-active .header, ' +
+            '.streaming-active .footer, ' +
+            '.streaming-active .overlay, ' +
+            '.streaming-active .ui-overlay, ' +
+            '.streaming-active .info-panel, ' +
+            '.streaming-active .debug-info, ' +
+            '.streaming-active .connection-info, ' +
+            '.streaming-active .technical-details, ' +
+            '.streaming-active .status, ' +
+            '.streaming-active .info, ' +
+            '.streaming-active .panel, ' +
+            '.streaming-active .toolbar, ' +
+            '.streaming-active .menu, ' +
+            '.streaming-active .nav, ' +
+            '.streaming-active .sidebar, ' +
+            '.streaming-active .hud, ' +
+            '.streaming-active .ui, ' +
+            '.streaming-active div:not([class*="video"]):not([id*="video"]), ' +
+            '.streaming-active p, ' +
+            '.streaming-active span, ' +
+            '.streaming-active h1, .streaming-active h2, .streaming-active h3, ' +
+            '.streaming-active button, ' +
+            '.streaming-active input, ' +
+            '.streaming-active form, ' +
+            '.streaming-active label, ' +
+            '.streaming-active .text { ' +
+              'display: none !important; ' +
+              'visibility: hidden !important; ' +
+              'opacity: 0 !important; ' +
+            '} ' +
+            '.streaming-active { ' +
+              'background: #000 !important; ' +
+            '} ' +
+            '.streaming-active video { ' +
+              'position: fixed !important; ' +
+              'top: 0 !important; ' +
+              'left: 0 !important; ' +
+              'width: 100vw !important; ' +
+              'height: 100vh !important; ' +
+              'object-fit: contain !important; ' +
+              'z-index: 9999 !important; ' +
+              'background: #000 !important; ' +
+            '} ' +
+            '.streaming-active canvas, .streaming-active [class*="stream"] { ' +
+              'position: fixed !important; ' +
+              'top: 0 !important; ' +
+              'left: 0 !important; ' +
+              'width: 100vw !important; ' +
+              'height: 100vh !important; ' +
+              'z-index: 9998 !important; ' +
+            '}';
+          document.head.appendChild(style);
+          
+          // Detect streaming state and communicate with React Native
           let wasStreaming = false;
           setInterval(() => {
             const videos = document.querySelectorAll('video');
             const isStreaming = videos.length > 0 && Array.from(videos).some(v => v.videoWidth > 0);
             
+            // Toggle streaming class on body to hide/show UI elements
+            if (isStreaming) {
+              document.body.classList.add('streaming-active');
+              document.documentElement.classList.add('streaming-active');
+            } else {
+              document.body.classList.remove('streaming-active');
+              document.documentElement.classList.remove('streaming-active');
+            }
+            
             if (wasStreaming !== isStreaming) {
-              console.log(isStreaming ? '🎥 Stream started' : '⏹️ Stream stopped');
+              console.log(isStreaming ? '🎥 Stream started - hiding all UI' : '⏹️ Stream stopped - showing UI');
+              // Send message to React Native for clean UI control
+              window.ReactNativeWebView?.postMessage(JSON.stringify({
+                type: 'stream_state_change',
+                isStreaming: isStreaming
+              }));
             }
             
             wasStreaming = isStreaming;
-          }, 2000);
+          }, 500); // Check more frequently for responsive UI hiding
           
           true; // Required for WebView
         `}
       />
 
-      {/* Controls Overlay */}
-      {showControls && (
+      {/* Controls Overlay - Only show when not streaming */}
+      {showControls && !isStreaming && (
         <View style={styles.overlay}>
           <View style={styles.statusContainer}>
             <View
@@ -262,8 +361,8 @@ export default function WebViewReceiver() {
         </View>
       )}
 
-      {/* Error State */}
-      {connectionState.status === 'error' && (
+      {/* Error State - Only show when not streaming */}
+      {connectionState.status === 'error' && !isStreaming && (
         <View style={styles.errorOverlay}>
           <Text style={styles.errorText}>⚠️ Connection Error</Text>
           <Text style={styles.errorMessage}>{connectionState.message}</Text>

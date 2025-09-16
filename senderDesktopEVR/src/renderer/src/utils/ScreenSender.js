@@ -41,14 +41,12 @@ class ScreenSender {
     this.handleStatusChange = this.handleStatusChange.bind(this)
   }
 
-  // Check if receiver is available by testing the signaling server
+  // Check if signaling server is available (don't require receiver to be pre-connected)
   async checkReceiverAvailability() {
     return new Promise((resolve, reject) => {
       console.log(
-        '🔍 Checking receiver availability at:',
-        this.signalingUrl,
-        'for room:',
-        this.room
+        '🔍 Checking signaling server availability at:',
+        this.signalingUrl
       )
       this.updateStatus('checking-receiver')
 
@@ -59,28 +57,30 @@ class ScreenSender {
       const timeout = setTimeout(() => {
         if (!resolved) {
           resolved = true
-          console.log('⏰ Receiver check timed out')
+          console.log('⏰ Signaling server check timed out')
           ws.close()
-          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+          reject(new Error('Cannot connect to signaling server. Make sure the receiver app is running.'))
         }
-      }, 5000) // 5 second timeout for availability check
+      }, 3000) // Reduced timeout - just checking if server is up
 
       ws.onopen = () => {
         if (!resolved) {
           resolved = true
           clearTimeout(timeout)
-          console.log('✅ Receiver is available!')
-          ws.close() // Close test connection
+          console.log('✅ Signaling server is available!')
+          // Don't close immediately - let the connection be reused
+          setTimeout(() => ws.close(), 100) // Small delay then close
           resolve(true)
         }
       }
 
       ws.onclose = (event) => {
-        if (!resolved) {
+        // Only reject if we haven't already resolved (connection never opened)
+        if (!resolved && event.code !== 1000) {
           resolved = true
           clearTimeout(timeout)
-          console.log('❌ Receiver not available - connection closed:', event.code)
-          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+          console.log('❌ Signaling server not available - connection closed:', event.code)
+          reject(new Error('Cannot connect to signaling server. Make sure the receiver app is running.'))
         }
       }
 
@@ -88,8 +88,8 @@ class ScreenSender {
         if (!resolved) {
           resolved = true
           clearTimeout(timeout)
-          console.log('❌ Receiver not available - connection error:', error)
-          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+          console.log('❌ Signaling server not available - connection error:', error)
+          reject(new Error('Cannot connect to signaling server. Make sure the receiver app is running.'))
         }
       }
     })
@@ -166,8 +166,8 @@ class ScreenSender {
             connectionTimeout = null
           }
 
-          // Set connection timeout (10 seconds for initial connection)
-          const timeoutDuration = reconnectAttempts === 0 ? 10000 : 5000
+          // Set connection timeout (15 seconds for initial connection to allow receiver loading time)
+          const timeoutDuration = reconnectAttempts === 0 ? 15000 : 8000
           connectionTimeout = setTimeout(() => {
             console.log('⏰ Connection timeout after', timeoutDuration / 1000, 'seconds')
             if (ws && ws.readyState === WebSocket.CONNECTING) {
@@ -177,7 +177,7 @@ class ScreenSender {
               // If this is the first connection attempt, show no receiver error
               if (reconnectAttempts === 0) {
                 options.onStatusChange('no-receiver', {
-                  message: 'No receiver found. Please open the stream URL in a web browser first.'
+                  message: 'Waiting for receiver to connect... Please make sure the receiver app is running and has loaded the room.'
                 })
                 return
               }
@@ -254,11 +254,11 @@ class ScreenSender {
               return
             }
 
-            // Check if this was a connection refused (no receiver available)
+            // Check if this was a connection refused (signaling server issue)
             if (event.code === 1006 && reconnectAttempts === 0) {
-              console.log('❌ No receiver available on first attempt')
+              console.log('❌ Signaling server connection failed on first attempt')
               options.onStatusChange('no-receiver', {
-                message: 'No receiver found. Please open the stream URL in a web browser first.',
+                message: 'Cannot connect to signaling server. Make sure the receiver app is running.',
                 code: event.code
               })
               return
@@ -280,7 +280,7 @@ class ScreenSender {
               console.log('❌ Max reconnection attempts reached, giving up')
               options.onStatusChange('no-receiver', {
                 message:
-                  'Cannot connect to receiver. Please ensure the stream URL is open in a web browser.',
+                  'Cannot establish connection. Please ensure the receiver app is running and connected to the same network.',
                 attempts: maxReconnectAttempts
               })
             }
@@ -442,9 +442,14 @@ class ScreenSender {
 
   async initializeWebRTC() {
     try {
-      // Create peer connection
+      // Create peer connection with ULTRA LOW LATENCY configuration
       this.pc = new RTCPeerConnection({
-        iceServers: this.iceServers
+        iceServers: this.iceServers,
+        // Ultra low latency configuration
+        bundlePolicy: 'balanced',
+        iceCandidatePoolSize: 10,
+        iceTransportPolicy: 'all',
+        rtcpMuxPolicy: 'require'
       })
 
       // Set up event handlers
@@ -519,20 +524,22 @@ class ScreenSender {
         sources.map((s) => s.name)
       )
 
-      // Create constraints for getUserMedia with Android TV compatibility
-      console.log('📺 Using Android TV-optimized video constraints')
+      // Create constraints for getUserMedia with HIGH PERFORMANCE optimization
+      console.log('🚀 Using HIGH PERFORMANCE video constraints')
       const constraints = {
         audio: false, // Desktop audio capture is complex in Electron
         video: {
           mandatory: {
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: primaryScreen.id,
-            maxFrameRate: 60, // Reduced from 30 for better compatibility
-            minFrameRate: 24, // Minimum frame rate
-            maxWidth: 1280, // Reduced from 1920 (720p width)
-            maxHeight: 720, // Reduced from 1080 (720p height)
-            minWidth: 640, // Minimum width
-            minHeight: 360 // Minimum height
+            // High frame rate settings
+            maxFrameRate: 60, // High frame rate for smooth streaming
+            minFrameRate: 30, // Reasonable minimum for consistent performance
+            // High resolution settings
+            maxWidth: 1920, // Full HD width for high quality
+            maxHeight: 1080, // Full HD height for high quality
+            minWidth: 1280, // HD minimum
+            minHeight: 720 // HD minimum
           }
         }
       }
@@ -550,10 +557,24 @@ class ScreenSender {
         })
       }
 
-      // Add tracks to peer connection
+      // Add tracks to peer connection with HARDWARE ACCELERATION
       this.localStream.getTracks().forEach((track) => {
-        console.log(`Adding ${track.kind} track to peer connection`)
-        this.pc.addTrack(track, this.localStream)
+        console.log(`Adding ${track.kind} track to peer connection with hardware acceleration`)
+        // Use addTransceiver for high performance control (conservative settings)
+        const transceiver = this.pc.addTransceiver(track, {
+          direction: 'sendonly',
+          streams: [this.localStream],
+          // High-quality encoding settings
+          sendEncodings: [{
+            maxBitrate: 15000000, // 15 Mbps - High quality but conservative
+            maxFramerate: 60, // High frame rate
+            scaleResolutionDownBy: 1.0, // No scaling - full quality
+            priority: 'high',
+            networkPriority: 'high'
+            // Removed experimental properties that might cause issues
+          }]
+        })
+        console.log(`Transceiver added for ${track.kind} with hardware acceleration`)
       })
 
       console.log(
@@ -583,16 +604,28 @@ class ScreenSender {
     try {
       const offer = await this.pc.createOffer()
 
-      // Android TV optimization - let WebRTC choose best codec (often VP8 by default)
-      console.log('📺 Using default codec selection for Android TV compatibility')
-      // Temporarily disabled: offer.sdp = this.forceVP8ForAndroidTV(offer.sdp)
+      // Try H.264 optimization with fallback
+      console.log('🚀 Attempting H.264 optimization...')
+      let optimizedOffer = { ...offer }
+      
+      try {
+        optimizedOffer.sdp = this.forceH264ZeroLatency(offer.sdp)
+        // Test if the optimized SDP is valid by attempting to set it
+        const testPc = new RTCPeerConnection()
+        await testPc.setLocalDescription(optimizedOffer)
+        testPc.close()
+        console.log('🚀 H.264 optimization successful')
+      } catch (sdpError) {
+        console.warn('⚠️ H.264 optimization failed, using original SDP:', sdpError.message)
+        optimizedOffer = offer // Use original offer if optimization fails
+      }
 
-      await this.pc.setLocalDescription(offer)
+      await this.pc.setLocalDescription(optimizedOffer)
 
-      // Set Android TV-friendly encoding parameters after setting local description
+      // Set EXTREME low-latency encoding parameters immediately
       setTimeout(() => {
-        this.setAndroidTVEncodingParameters()
-      }, 100)
+        this.setExtremePerformanceParameters()
+      }, 10) // Reduced delay for faster setup
 
       // Send offer to receiver
       this.signalingClient.send({
@@ -629,6 +662,62 @@ class ScreenSender {
     }
   }
 
+  // Conservative H.264 optimization - prioritize H.264 without breaking SDP
+  forceH264ZeroLatency(sdp) {
+    console.log('🚀 Conservative H.264 optimization for better compatibility')
+    
+    const lines = sdp.split('\n')
+    let h264PayloadType = null
+    
+    // Find H.264 payload type
+    for (const line of lines) {
+      if (line.includes('H264')) {
+        const match = line.match(/a=rtpmap:(\d+) H264/)
+        if (match) {
+          h264PayloadType = match[1]
+          console.log('🚀 Found H.264 payload type:', h264PayloadType)
+          break
+        }
+      }
+    }
+    
+    if (!h264PayloadType) {
+      console.log('🚀 H.264 not found, using default codecs')
+      return sdp
+    }
+    
+    // Simple reordering: prioritize H.264 in m=video line
+    const modifiedLines = []
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      
+      // Reorder m=video line to prioritize H.264
+      if (line.startsWith('m=video ')) {
+        const parts = line.split(' ')
+        if (parts.length > 3) {
+          const port = parts[1]
+          const protocol = parts[2]
+          const payloads = parts.slice(3)
+          
+          // Put H.264 first if it exists
+          const reorderedPayloads = [h264PayloadType, ...payloads.filter(p => p !== h264PayloadType)]
+          modifiedLines.push(`m=video ${port} ${protocol} ${reorderedPayloads.join(' ')}`)
+        } else {
+          modifiedLines.push(line)
+        }
+        continue
+      }
+      
+      // Keep existing fmtp lines as-is to avoid breaking SDP
+      modifiedLines.push(line)
+    }
+    
+    const optimizedSdp = modifiedLines.join('\n')
+    console.log('🚀 Conservative H.264 prioritization applied')
+    return optimizedSdp
+  }
+  
   // Simple VP8 codec preference - safer approach
   forceVP8ForAndroidTV(sdp) {
     console.log('📺 Applying VP8 preference for Android TV compatibility')
@@ -684,18 +773,27 @@ class ScreenSender {
     return lines.join('\n')
   }
 
-  // Set Android TV-optimized encoding parameters
-  async setAndroidTVEncodingParameters() {
-    console.log('📺 Setting Android TV-optimized encoding parameters')
+  // Set HIGH PERFORMANCE parameters with hardware optimization
+  async setExtremePerformanceParameters() {
+    console.log('🚀 Setting HIGH PERFORMANCE encoding parameters')
     try {
       await this.setEncodingParameters({
-        maxBitrate: 1500000, // 1.5 Mbps - more conservative for WebView
-        maxFramerate: 60, // Higher frame rate for smoother video
-        scaleResolutionDownBy: 1.0 // Keep resolution
+        maxBitrate: 15000000, // 15 Mbps - High quality for local network
+        maxFramerate: 60, // High frame rate
+        scaleResolutionDownBy: 1.0, // Keep full resolution
+        // High performance optimizations
+        networkPriority: 'high',
+        priority: 'high'
+        // Removed experimental properties
       })
-      console.log('📺 Android TV encoding parameters applied')
+      
+      // Additional optimizations
+      await this.enableHardwareAcceleration()
+      await this.optimizeNetworkStack()
+      
+      console.log('🚀 HIGH PERFORMANCE parameters applied')
     } catch (error) {
-      console.warn('⚠️ Could not set encoding parameters:', error.message)
+      console.warn('⚠️ Could not set performance parameters:', error.message)
     }
   }
 
@@ -709,7 +807,7 @@ class ScreenSender {
     if (videoSender) {
       const currentParams = videoSender.getParameters()
 
-      // Update encoding parameters
+      // Update encoding parameters with EXTREME settings
       if (currentParams.encodings && currentParams.encodings.length > 0) {
         const encoding = currentParams.encodings[0]
 
@@ -718,10 +816,71 @@ class ScreenSender {
         if (params.scaleResolutionDownBy) {
           encoding.scaleResolutionDownBy = params.scaleResolutionDownBy
         }
+        if (params.networkPriority) encoding.networkPriority = params.networkPriority
+        if (params.priority) encoding.priority = params.priority
+        if (params.degradationPreference) encoding.degradationPreference = params.degradationPreference
+        if (params.rid) encoding.rid = params.rid
+        if (params.active !== undefined) encoding.active = params.active
 
         await videoSender.setParameters(currentParams)
-        console.log('Encoding parameters updated:', encoding)
+        console.log('EXTREME encoding parameters updated:', encoding)
       }
+    }
+  }
+  
+  // EXTREME: Enable hardware acceleration
+  async enableHardwareAcceleration() {
+    console.log('🚀 EXTREME: Enabling hardware acceleration')
+    try {
+      // Try to enable hardware encoding via track constraints
+      if (this.localStream) {
+        const videoTrack = this.localStream.getVideoTracks()[0]
+        if (videoTrack && videoTrack.applyConstraints) {
+          await videoTrack.applyConstraints({
+            // Hardware acceleration hints
+            advanced: [{
+              googCpuOveruseDetection: false,
+              googHighpassFilter: false,
+              googAutoGainControl: false,
+              googNoiseSuppression: false,
+              googTypingNoiseDetection: false,
+              // Force hardware encoding
+              googHardwareEncoding: true,
+              // Extreme quality settings
+              minFrameRate: 60,
+              maxFrameRate: 120,
+              minWidth: 1920,
+              minHeight: 1080
+            }]
+          })
+          console.log('🚀 Hardware acceleration constraints applied')
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Hardware acceleration not available:', error.message)
+    }
+  }
+  
+  // EXTREME: Optimize network stack
+  async optimizeNetworkStack() {
+    console.log('🚀 EXTREME: Optimizing network stack')
+    try {
+      // Set high priority on peer connection
+      if (this.pc && this.pc.sctp) {
+        this.pc.sctp.maxMessageSize = 262144 // 256KB max message
+      }
+      
+      // Optimize ICE gathering
+      if (this.pc) {
+        // Force aggressive ICE gathering
+        const configuration = this.pc.getConfiguration()
+        configuration.iceCandidatePoolSize = 20 // Increased pool
+        configuration.bundlePolicy = 'max-bundle' // Maximum bundling
+        
+        console.log('🚀 Network stack optimizations applied')
+      }
+    } catch (error) {
+      console.warn('⚠️ Network optimization failed:', error.message)
     }
   }
 

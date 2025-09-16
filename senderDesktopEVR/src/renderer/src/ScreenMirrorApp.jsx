@@ -129,7 +129,8 @@ function ScreenMirrorApp() {
         {/* Receiver URL - Always Visible */}
         <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
           <div className="text-center mb-3">
-            <h3 className="text-lg font-semibold text-blue-800 mb-2">⌨️ Step 1: Create a Room</h3>
+            {/* DO NOT DELETE THIS COMMENTED CODE Might be useful later */}
+            {/* <h3 className="text-lg font-semibold text-blue-800 mb-2">⌨️ Step 1: Create a Room</h3>
             <p className="text-sm text-blue-700 mb-3">Enter your room code for private sharing:</p>
             <div className="flex gap-2 mb-3">
               <input
@@ -140,12 +141,13 @@ function ScreenMirrorApp() {
                 className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 disabled={isStreaming || isButtonDisabled()}
               />
-            </div>
+            </div> */}
             <h3 className="text-lg font-semibold text-blue-800 mb-2">
-              📱 Step 2: Open This URL in Your Browser
+              📱 Step 1: Open This URL in Your Browser or Open the TV App
             </h3>
             <p className="text-sm text-blue-700 mb-3">
-              Open this URL in any web browser (on any device on your network):
+              Open this URL in any web browser or open the TV App (must be on the same WIFI network)
+              you should see waiting for room as answerer...
             </p>
           </div>
           <div className="bg-white p-3 rounded-lg border border-blue-200 mb-3">
@@ -175,7 +177,7 @@ function ScreenMirrorApp() {
 
         {/* Step 2 Header */}
         <div className="text-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">📺 Step 3: Start Screen Sharing</h3>
+          <h3 className="text-lg font-semibold text-gray-800">📺 Step 2: Start Screen Sharing</h3>
           <p className="text-sm text-gray-600">
             After opening the URL above, click the button below to start sharing
           </p>
@@ -253,7 +255,7 @@ function ScreenMirrorApp() {
             </p>
           ) : (
             <p className="text-xs text-green-600 text-center font-medium">
-              ✅ Screen sharing active! Your browser should now show the stream.
+              ✅ Screen sharing active! Your browser or TV App should now show the stream.
             </p>
           )}
         </div>

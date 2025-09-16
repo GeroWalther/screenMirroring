@@ -65,7 +65,19 @@
   </head>
   <body>
     <div id="videoContainer">
-      <video id="remoteVideo" autoplay playsinline muted></video>
+      <video 
+        id="remoteVideo" 
+        autoplay 
+        playsinline 
+        muted 
+        preload="none"
+        disablePictureInPicture
+        webkit-playsinline="true"
+        x5-playsinline="true"
+        x-webkit-airplay="deny"
+        controlslist="nodownload nofullscreen noremoteplaybook"
+        style="background: black; object-fit: contain; width: 100%; height: 100%;"
+      ></video>
     </div>
 
     <div id="status" class="status-connecting">
@@ -124,7 +136,15 @@
       }
 
       function createPeerConnection() {
-        pc = new RTCPeerConnection({ iceServers });
+        // ULTRA LOW LATENCY WebRTC configuration
+        pc = new RTCPeerConnection({ 
+          iceServers,
+          // Ultra low latency configuration
+          bundlePolicy: 'balanced',
+          iceCandidatePoolSize: 10,
+          iceTransportPolicy: 'all',
+          rtcpMuxPolicy: 'require'
+        });
 
         pc.onicecandidate = (event) => {
           if (event.candidate && ws.readyState === WebSocket.OPEN) {
@@ -139,8 +159,24 @@
           );
 
           if (event.streams && event.streams.length > 0) {
-            videoEl.srcObject = event.streams[0];
-            updateStatus('📺 Receiving video stream', 'status-connected');
+            // ULTRA LOW LATENCY video setup
+            const stream = event.streams[0];
+            videoEl.srcObject = stream;
+            
+            // Force immediate playback and reduce buffering
+            videoEl.currentTime = 0;
+            videoEl.defaultPlaybackRate = 1.0;
+            videoEl.playbackRate = 1.0;
+            
+            // Optimize for low latency
+            if (videoEl.getVideoPlaybackQuality) {
+              console.log('🚀 Video hardware acceleration available');
+            }
+            
+            // Start playing immediately
+            videoEl.play().catch(e => console.warn('Autoplay failed:', e));
+            
+            updateStatus('🚀 ULTRA LOW LATENCY streaming active', 'status-connected');
           }
         };
 

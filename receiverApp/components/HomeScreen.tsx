@@ -14,16 +14,15 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      
+
       <Text style={styles.title}>📺 Screen Mirror Receiver</Text>
       <Text style={styles.subtitle}>Choose your receiver mode</Text>
-      
+
       <View style={styles.optionsContainer}>
-        <Pressable 
+        <Pressable
           style={styles.optionButton}
           onPress={() => navigation.navigate('WebViewReceiver')}
-          hasTVPreferredFocus={true}
-        >
+          hasTVPreferredFocus={true}>
           <Text style={styles.optionEmoji}>🌐</Text>
           <Text style={styles.optionTitle}>WebView Receiver</Text>
           <Text style={styles.optionDescription}>
@@ -32,10 +31,9 @@ export default function HomeScreen({ navigation }: Props) {
           </Text>
         </Pressable>
 
-        <Pressable 
+        <Pressable
           style={styles.optionButton}
-          onPress={() => navigation.navigate('WebRTCReceiver')}
-        >
+          onPress={() => navigation.navigate('WebRTCReceiver')}>
           <Text style={styles.optionEmoji}>📡</Text>
           <Text style={styles.optionTitle}>Native WebRTC</Text>
           <Text style={styles.optionDescription}>
@@ -61,7 +59,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
-  
+
   title: {
     color: '#fff',
     fontSize: 32,
@@ -69,20 +67,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
   },
-  
+
   subtitle: {
     color: '#ccc',
     fontSize: 18,
     textAlign: 'center',
     marginBottom: 40,
   },
-  
+
   optionsContainer: {
     width: '100%',
     maxWidth: 400,
     gap: 20,
   },
-  
+
   optionButton: {
     backgroundColor: '#1a1a1a',
     borderWidth: 2,
@@ -90,15 +88,13 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 24,
     alignItems: 'center',
-    // TV-friendly styling
-    focusable: true,
   },
-  
+
   optionEmoji: {
     fontSize: 48,
     marginBottom: 12,
   },
-  
+
   optionTitle: {
     color: '#fff',
     fontSize: 20,
@@ -106,14 +102,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     textAlign: 'center',
   },
-  
+
   optionDescription: {
     color: '#aaa',
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
   },
-  
+
   footerText: {
     color: '#666',
     fontSize: 12,
