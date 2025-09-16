@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useScreenSender } from './hooks/useScreenSender'
-import ConnectionStatus from './components/ConnectionStatus'
 
 const ROOM_NAME = 'living-room'
 
@@ -14,7 +13,6 @@ function ScreenMirrorApp() {
     startSharing,
     stopSharing,
     cancelConnection,
-    retryConnection,
     openReceiverURL,
     getStreamURL,
     setRoom
