@@ -1,7 +1,11 @@
 const express = require('express');
 const { WebSocketServer } = require('ws');
+const path = require('path');
 const app = express();
 app.use(express.json());
+
+// Serve static files from the parent directory (where web-receiver.html is located)
+app.use(express.static(path.join(__dirname, '..')));
 
 const rooms = new Map(); // roomId -> { offerer:ws, answerer:ws }
 
