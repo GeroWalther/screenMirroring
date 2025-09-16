@@ -83,20 +83,6 @@ const updateTrayMenu = () => {
     },
     { type: 'separator' },
 
-    // Main action
-    {
-      label: isStreaming ? '🔴 Stop Sharing' : '🚀 Share Screen',
-      click: () => {
-        if (isStreaming) {
-          stopSharing()
-        } else {
-          startSharing()
-        }
-      }
-    },
-
-    { type: 'separator' },
-
     // Stream URL info when sharing
     ...(isStreaming
       ? [
@@ -112,6 +98,11 @@ const updateTrayMenu = () => {
               shell.openExternal(streamURL)
             }
           },
+          { type: 'separator' },
+          {
+            label: '🔴 Stop Sharing',
+            click: () => stopSharing()
+          },
           { type: 'separator' }
         ]
       : []),
@@ -124,7 +115,7 @@ const updateTrayMenu = () => {
 
     { type: 'separator' },
     {
-      label: '⚙️ Settings',
+      label: '✈️ Open',
       click: () => createWindow()
     },
     {
@@ -316,6 +307,18 @@ ipcMain.on('streaming-stopped', () => {
 // Get local IP address for renderer
 ipcMain.handle('get-local-ip', () => {
   return getLocalIPAddress()
+})
+
+// Handle room updates from renderer
+ipcMain.on('update-room', (event, newRoom) => {
+  console.log('🏠 Main process received room update:', newRoom)
+  currentRoom = newRoom
+  updateTrayMenu() // Update tray menu with new room
+})
+
+// Get current room (for renderer to sync on startup)
+ipcMain.handle('get-current-room', () => {
+  return currentRoom
 })
 
 // Get desktop sources for screen capture

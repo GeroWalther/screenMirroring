@@ -330,9 +330,18 @@ export const useScreenSender = () => {
     }
   }, [getStreamURL])
 
-  // Get local IP address on mount
+  // Sync room with main process whenever it changes
   useEffect(() => {
-    const getIP = async () => {
+    if (window.api?.updateRoom) {
+      window.api.updateRoom(room)
+      console.log('🏠 Updated main process with room:', room)
+    }
+  }, [room])
+
+  // Get local IP address and sync with main process on mount
+  useEffect(() => {
+    const initializeData = async () => {
+      // Get local IP
       if (window.api?.getLocalIP) {
         try {
           const ip = await window.api.getLocalIP()
@@ -344,8 +353,25 @@ export const useScreenSender = () => {
           console.error('❌ Failed to get local IP:', error)
         }
       }
+
+      // Sync room with main process on startup
+      if (window.api?.getCurrentRoom) {
+        try {
+          const currentMainRoom = await window.api.getCurrentRoom()
+          console.log('🏠 Syncing with main process room:', currentMainRoom)
+          if (currentMainRoom && currentMainRoom !== room) {
+            setRoom(currentMainRoom)
+          } else {
+            // Update main process with our current room
+            window.api.updateRoom(room)
+          }
+        } catch (error) {
+          console.error('❌ Failed to sync room with main process:', error)
+        }
+      }
     }
-    getIP()
+    
+    initializeData()
   }, [])
 
   // Cleanup on unmount

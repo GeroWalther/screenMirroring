@@ -16,6 +16,10 @@ const api = {
   // Network utilities
   getLocalIP: () => ipcRenderer.invoke('get-local-ip'),
 
+  // Room management
+  updateRoom: (room) => ipcRenderer.send('update-room', room),
+  getCurrentRoom: () => ipcRenderer.invoke('get-current-room'),
+
   // Screen capture utilities
   getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
 
