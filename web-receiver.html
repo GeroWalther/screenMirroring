@@ -67,14 +67,19 @@
     <div id="debug">
         <div>🌐 Web Browser WebRTC Receiver</div>
         <div>Server: ws://192.168.0.26:8080</div>
-        <div>Room: living-room</div>
+        <div id="roomDisplay">Room: (loading...)</div>
         <div id="debugInfo">Initializing...</div>
     </div>
 
     <script>
+        // Get room from URL parameter or default to 'living-room'
+        const urlParams = new URLSearchParams(window.location.search);
+        const ROOM_NAME = urlParams.get('room') || 'living-room';
+        
         // Configuration
         const SIGNALING_URL = 'ws://192.168.0.26:8080';
-        const ROOM_NAME = 'living-room';
+        
+        console.log('🏠 Web Receiver starting with room:', ROOM_NAME, 'from URL:', window.location.href);
         
         // ICE servers
         const iceServers = [
@@ -218,6 +223,11 @@
         // Initialize
         function init() {
             console.log('🚀 Initializing Web Browser WebRTC Receiver');
+            console.log('🏠 Using room:', ROOM_NAME);
+            
+            // Update room display
+            document.getElementById('roomDisplay').textContent = `Room: ${ROOM_NAME}`;
+            
             updateDebug('Initializing WebRTC...');
             
             createPeerConnection();
