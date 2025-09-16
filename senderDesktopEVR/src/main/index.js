@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Tray, Menu, nativeImage, clipboard } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { networkInterfaces } from 'os'
@@ -93,9 +93,18 @@ const updateTrayMenu = () => {
           {
             label: streamURL,
             click: () => {
-              // Copy to clipboard and open in browser
-              shell.writeTextToClipboard(streamURL)
-              shell.openExternal(streamURL)
+              // Copy to clipboard only
+              clipboard.writeText(streamURL)
+              console.log('📋 Copied stream URL to clipboard:', streamURL)
+              
+              // Show notification that URL was copied
+              if (tray) {
+                tray.displayBalloon({
+                  title: 'Stream URL Copied!',
+                  content: 'The stream URL has been copied to your clipboard.',
+                  icon: nativeImage.createFromNamedImage('NSInfo')
+                })
+              }
             }
           },
           { type: 'separator' },
@@ -301,7 +310,6 @@ ipcMain.on('streaming-stopped', () => {
   isStreaming = false
   updateTrayMenu()
 })
-
 // Get local IP address for renderer
 ipcMain.handle('get-local-ip', () => {
   return getLocalIPAddress()
