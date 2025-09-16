@@ -39,6 +39,55 @@ class ScreenSender {
     this.handleStatusChange = this.handleStatusChange.bind(this)
   }
 
+  // Check if receiver is available by testing the signaling server
+  async checkReceiverAvailability() {
+    return new Promise((resolve, reject) => {
+      console.log('🔍 Checking receiver availability at:', this.signalingUrl)
+      this.updateStatus('checking-receiver')
+      
+      const ws = new WebSocket(this.signalingUrl)
+      let resolved = false
+      
+      // Set timeout for availability check
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true
+          console.log('⏰ Receiver check timed out')
+          ws.close()
+          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+        }
+      }, 5000) // 5 second timeout for availability check
+      
+      ws.onopen = () => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          console.log('✅ Receiver is available!')
+          ws.close() // Close test connection
+          resolve(true)
+        }
+      }
+      
+      ws.onclose = (event) => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          console.log('❌ Receiver not available - connection closed:', event.code)
+          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+        }
+      }
+      
+      ws.onerror = (error) => {
+        if (!resolved) {
+          resolved = true
+          clearTimeout(timeout)
+          console.log('❌ Receiver not available - connection error:', error)
+          reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
+        }
+      }
+    })
+  }
+
   async start() {
     try {
       console.log('🚀 SENDER START - Initializing with config:', {
@@ -48,6 +97,16 @@ class ScreenSender {
       })
       
       this.updateStatus('starting')
+
+      // First check if receiver is available
+      try {
+        await this.checkReceiverAvailability()
+      } catch (error) {
+        console.log('❌ Receiver availability check failed:', error.message)
+        this.updateStatus('no-receiver')
+        this.onError(error)
+        return
+      }
 
       // Create signaling client
       console.log('📡 SENDER - Creating signaling client')
@@ -75,9 +134,11 @@ class ScreenSender {
   createWebRTCSignaling(url, options) {
     let ws = null
     let reconnectAttempts = 0
-    let maxReconnectAttempts = 10
+    let maxReconnectAttempts = 5 // Reduced from 10 for faster timeout
     let reconnectDelay = 1000
     let connectionId = Math.random().toString(36).substr(2, 9)
+    let connectionTimeout = null
+    let initialConnectionTimeout = null
     
     console.log('🏭 SIGNALING CLIENT CREATED - ID:', connectionId, 'URL:', url)
 
@@ -86,12 +147,44 @@ class ScreenSender {
         try {
           console.log('🔗 SENDER WS CONNECT START - ID:', connectionId, 'URL:', url)
           console.log('🔗 WebSocket.CONNECTING =', WebSocket.CONNECTING, 'WebSocket.OPEN =', WebSocket.OPEN)
+          
+          // Clear any existing timeout
+          if (connectionTimeout) {
+            clearTimeout(connectionTimeout)
+            connectionTimeout = null
+          }
+          
+          // Set connection timeout (10 seconds for initial connection)
+          const timeoutDuration = reconnectAttempts === 0 ? 10000 : 5000
+          connectionTimeout = setTimeout(() => {
+            console.log('⏰ Connection timeout after', timeoutDuration / 1000, 'seconds')
+            if (ws && ws.readyState === WebSocket.CONNECTING) {
+              console.log('❌ TIMEOUT: WebSocket still connecting, closing...')
+              ws.close()
+              
+              // If this is the first connection attempt, show no receiver error
+              if (reconnectAttempts === 0) {
+                options.onStatusChange('no-receiver', {
+                  message: 'No receiver found. Please open the stream URL in a web browser first.'
+                })
+                return
+              }
+            }
+          }, timeoutDuration)
+          
           ws = new WebSocket(url)
           console.log('🔗 WebSocket created - ReadyState:', ws.readyState, '(should be', WebSocket.CONNECTING, ')')
 
           ws.onopen = () => {
             console.log('✅ SENDER WS CONNECTED - ID:', connectionId, 'URL:', url)
             console.log('✅ WebSocket state: ReadyState =', ws.readyState, '(should be', WebSocket.OPEN, ')')
+            
+            // Clear connection timeout on successful connection
+            if (connectionTimeout) {
+              clearTimeout(connectionTimeout)
+              connectionTimeout = null
+            }
+            
             reconnectAttempts = 0
             reconnectDelay = 1000
             console.log('📡 SENDER - Calling onStatusChange("connected")')
@@ -119,10 +212,26 @@ class ScreenSender {
               reason: event.reason,
               url: url
             })
+            
+            // Clear connection timeout on close
+            if (connectionTimeout) {
+              clearTimeout(connectionTimeout)
+              connectionTimeout = null
+            }
 
             // Don't reconnect if we're in the process of stopping
             if (options.isStopping && options.isStopping()) {
               console.log('🛑 Not reconnecting - stop was requested')
+              return
+            }
+
+            // Check if this was a connection refused (no receiver available)
+            if (event.code === 1006 && reconnectAttempts === 0) {
+              console.log('❌ No receiver available on first attempt')
+              options.onStatusChange('no-receiver', {
+                message: 'No receiver found. Please open the stream URL in a web browser first.',
+                code: event.code
+              })
               return
             }
 
@@ -139,7 +248,11 @@ class ScreenSender {
 
               reconnectDelay = Math.min(reconnectDelay * 2, 30000)
             } else {
-              options.onStatusChange('failed')
+              console.log('❌ Max reconnection attempts reached, giving up')
+              options.onStatusChange('no-receiver', {
+                message: 'Cannot connect to receiver. Please ensure the stream URL is open in a web browser.',
+                attempts: maxReconnectAttempts
+              })
             }
           }
 
@@ -177,6 +290,12 @@ class ScreenSender {
       },
 
       close() {
+        // Clear any pending timeouts
+        if (connectionTimeout) {
+          clearTimeout(connectionTimeout)
+          connectionTimeout = null
+        }
+        
         if (ws) {
           ws.close()
           ws = null
@@ -217,6 +336,13 @@ class ScreenSender {
 
       case 'reconnecting':
         this.updateStatus('reconnecting', data)
+        break
+
+      case 'no-receiver':
+        console.log('❌ No receiver available:', data.message)
+        this.updateStatus('no-receiver', data)
+        // Trigger error callback with helpful message
+        this.onError(new Error(data.message || 'No receiver found'))
         break
 
       case 'error':

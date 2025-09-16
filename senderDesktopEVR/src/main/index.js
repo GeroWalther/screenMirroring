@@ -165,7 +165,7 @@ const startSharing = async () => {
       const streamURL = getStreamURL()
       tray.displayBalloon({
         title: 'Screen Mirror',
-        content: `Sharing started! Stream URL: ${streamURL}`,
+        content: `Screen sharing started successfully! Stream is active.`,
         icon: nativeImage.createFromNamedImage('NSComputer')
       })
     }
@@ -177,7 +177,7 @@ const startSharing = async () => {
     if (tray) {
       tray.displayBalloon({
         title: 'Sharing Failed',
-        content: 'Could not start screen sharing',
+        content: 'Could not start screen sharing. Please try again.',
         icon: nativeImage.createFromNamedImage('NSCaution')
       })
     }
@@ -343,6 +343,18 @@ ipcMain.handle('get-desktop-sources', async () => {
     }))
   } catch (error) {
     console.error('Failed to get desktop sources:', error)
+    throw error
+  }
+})
+
+// Handle opening external URLs
+ipcMain.handle('shell-open-external', async (event, url) => {
+  try {
+    console.log('🌐 Opening external URL:', url)
+    await shell.openExternal(url)
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to open external URL:', error)
     throw error
   }
 })

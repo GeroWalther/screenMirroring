@@ -19,6 +19,11 @@ const api = {
   // Screen capture utilities
   getDesktopSources: () => ipcRenderer.invoke('get-desktop-sources'),
 
+  // Shell utilities
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell-open-external', url)
+  },
+
   // Event listeners
   onStartSharing: (callback) => ipcRenderer.on('start-sharing', callback),
   onStopSharing: (callback) => ipcRenderer.on('stop-sharing', callback),

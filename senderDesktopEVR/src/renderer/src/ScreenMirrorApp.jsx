@@ -1,29 +1,30 @@
 import { useState, useEffect } from 'react'
-import ScreenSender from './utils/ScreenSender.js'
+import { useScreenSender } from './hooks/useScreenSender'
+import ConnectionStatus from './components/ConnectionStatus'
 
-const SIGNALING_URL = 'ws://192.168.0.26:8080'
 const ROOM_NAME = 'living-room'
 
 function ScreenMirrorApp() {
-  const [status, setStatus] = useState('disconnected')
-  const [message, setMessage] = useState('Ready to connect')
-  const [isConnected, setIsConnected] = useState(false)
-  const [screenSender, setScreenSender] = useState(null)
+  const {
+    connectionState,
+    isStreaming,
+    error,
+    room,
+    localIP,
+    startSharing,
+    stopSharing,
+    retryConnection,
+    openReceiverURL,
+    getStreamURL,
+    setRoom
+  } = useScreenSender()
+  
   const [discoveredTVs, setDiscoveredTVs] = useState([])
   const [isDiscovering, setIsDiscovering] = useState(false)
   const [showTVList, setShowTVList] = useState(false)
-  const [selectedRoom, setSelectedRoom] = useState(ROOM_NAME)
-  const [localIP, setLocalIP] = useState('192.168.0.26')
 
-  // Get local IP and setup IPC listeners
+  // Setup IPC listeners for TV discovery
   useEffect(() => {
-    // Get local IP
-    if (window.api?.getLocalIP) {
-      window.api.getLocalIP().then((ip) => {
-        setLocalIP(ip)
-      })
-    }
-
     // Listen for discovered TVs
     if (window.api?.onTVsDiscovered) {
       const handleTVsFound = (tvs) => {
@@ -36,24 +37,14 @@ function ScreenMirrorApp() {
       }
       window.api.onTVsDiscovered(handleTVsFound)
     }
+  }, [])
 
-    return () => {
-      if (screenSender) {
-        screenSender.stop()
-      }
+  // Initialize room from constant
+  useEffect(() => {
+    if (room !== ROOM_NAME) {
+      setRoom(ROOM_NAME)
     }
-  }, [screenSender])
-
-  const updateStatus = (state, msg) => {
-    setStatus(state)
-    setMessage(msg)
-
-    if (state === 'streaming') {
-      setIsConnected(true)
-    } else if (state === 'disconnected' || state === 'error') {
-      setIsConnected(false)
-    }
-  }
+  }, [])
 
   const handleDiscoverTVs = () => {
     setIsDiscovering(true)
@@ -68,107 +59,59 @@ function ScreenMirrorApp() {
     }, 10000)
   }
 
-  const handleConnectToTV = (tv) => {
-    const room = tv.room || 'default'
-    const serverUrl = `ws://${tv.ip}:8080`
-    setSelectedRoom(room)
-    startScreenSharing(room, serverUrl)
+  const handleConnectToTV = async (tv) => {
+    const tvRoom = tv.room || 'default'
+    setRoom(tvRoom)
+    await startSharing({
+      room: tvRoom,
+      serverUrl: `ws://${tv.ip}:8080`
+    })
   }
 
-  const handleConnectToRoom = () => {
-    startScreenSharing(selectedRoom, SIGNALING_URL)
-  }
-
-  const startScreenSharing = async (room, signalingUrl) => {
-    if (screenSender && isConnected) {
-      // Stop sharing
-      screenSender.stop()
-      setScreenSender(null)
-      setIsConnected(false)
-      updateStatus('disconnected', 'Disconnected')
-      return
-    }
-
-    try {
-      updateStatus('connecting', 'Connecting to signaling server...')
-
-      const sender = new ScreenSender({
-        signalingUrl: signalingUrl,
-        room: room,
-        onStatusChange: (status, data) => {
-          console.log('📊 Status:', status, data)
-
-          switch (status) {
-            case 'starting':
-              updateStatus('connecting', 'Starting screen capture...')
-              break
-            case 'connecting':
-              updateStatus('connecting', 'Connecting to signaling server...')
-              break
-            case 'connected':
-              updateStatus('connected', 'Connected! Establishing WebRTC...')
-              break
-            case 'webrtc-connected':
-              updateStatus('streaming', 'Screen sharing active!')
-              break
-            case 'disconnected':
-              updateStatus('disconnected', 'Disconnected')
-              break
-            case 'reconnecting':
-              updateStatus('connecting', `Reconnecting... (attempt ${data.attempt || 1})`)
-              break
-            case 'error':
-              updateStatus('error', 'Connection failed - check TV app is running')
-              break
-          }
-        },
-        onError: (error) => {
-          console.error('❌ Screen sender error:', error)
-          updateStatus('error', error.message || 'Connection failed')
-        },
-        onStreamStarted: () => {
-          updateStatus('streaming', 'Screen sharing active!')
-        },
-        onStreamEnded: () => {
-          updateStatus('disconnected', 'Screen sharing stopped')
-        }
-      })
-
-      setScreenSender(sender)
-
-      // Store globally for debugging
-      window.debugSender = sender
-      console.log('🔍 DEBUG: Sender stored globally as window.debugSender')
-
-      // Start periodic status logging
-      const statusInterval = setInterval(() => {
-        if (sender && sender.getConnectionStatus) {
-          sender.getConnectionStatus()
-        }
-      }, 5000)
-
-      // Store interval for cleanup
-      sender._debugInterval = statusInterval
-
-      await sender.start()
-    } catch (error) {
-      console.error('❌ Failed to start screen sharing:', error)
-      updateStatus('error', error.message || 'Failed to start screen sharing')
+  const handleConnect = async () => {
+    if (isStreaming) {
+      stopSharing()
+    } else {
+      await startSharing()
     }
   }
 
-  const handleConnect = () => {
-    handleConnectToRoom()
+  // Get current status for UI display
+  const getDisplayStatus = () => {
+    if (error && error.type === 'no-receiver') return 'no-receiver'
+    if (isStreaming) return 'streaming'
+    if (connectionState === 'checking-receiver') return 'checking'
+    if (connectionState === 'connecting' || connectionState === 'starting') return 'connecting'
+    if (connectionState === 'connected' || connectionState.startsWith('webrtc-')) return 'connected'
+    if (connectionState === 'reconnecting') return 'reconnecting'
+    if (error || connectionState === 'error' || connectionState === 'failed') return 'error'
+    return 'ready'
+  }
+
+  const getDisplayMessage = () => {
+    if (error && typeof error === 'object' && error.message) return error.message
+    if (error) return `Error: ${error}`
+    if (isStreaming) return 'Screen sharing active!'
+    if (connectionState === 'checking-receiver') return 'Checking for receiver...'
+    if (connectionState === 'connecting' || connectionState === 'starting') return 'Connecting...'
+    if (connectionState === 'connected') return 'Connected! Establishing WebRTC...'
+    if (connectionState.startsWith('webrtc-')) return 'WebRTC connection established'
+    if (connectionState === 'reconnecting') return 'Reconnecting...'
+    return 'Ready to connect'
   }
 
   const getStatusColor = () => {
+    const status = getDisplayStatus()
     switch (status) {
       case 'connected':
         return 'text-green-600 bg-green-50'
       case 'connecting':
+      case 'checking':
         return 'text-orange-600 bg-orange-50'
       case 'streaming':
         return 'text-blue-600 bg-blue-50'
+      case 'no-receiver':
+        return 'text-purple-600 bg-purple-50'
       case 'error':
         return 'text-red-600 bg-red-50'
       default:
@@ -178,13 +121,17 @@ function ScreenMirrorApp() {
 
   const getStatusDot = () => {
     const baseClass = 'w-2 h-2 rounded-full mr-2'
+    const status = getDisplayStatus()
     switch (status) {
       case 'connected':
         return `${baseClass} bg-green-500`
       case 'connecting':
+      case 'checking':
         return `${baseClass} bg-orange-500 animate-pulse`
       case 'streaming':
         return `${baseClass} bg-blue-500`
+      case 'no-receiver':
+        return `${baseClass} bg-purple-500`
       case 'error':
         return `${baseClass} bg-red-500`
       default:
@@ -193,14 +140,16 @@ function ScreenMirrorApp() {
   }
 
   const getButtonText = () => {
+    const status = getDisplayStatus()
     if (status === 'streaming') return '🛑 Stop Sharing'
-    if (status === 'connecting') return '⏳ Connecting...'
-    if (status === 'error') return '🔄 Try Again'
+    if (status === 'connecting' || status === 'checking') return '⏳ Connecting...'
+    if (status === 'error' || status === 'no-receiver') return '🔄 Try Again'
     return '🚀 Start Screen Sharing'
   }
 
   const isButtonDisabled = () => {
-    return status === 'connecting'
+    const status = getDisplayStatus()
+    return status === 'connecting' || status === 'checking'
   }
 
   return (
@@ -213,21 +162,72 @@ function ScreenMirrorApp() {
           <p className="text-gray-600">Share your screen to any TV on your network</p>
         </div>
 
+        {/* Receiver URL - Always Visible */}
+        <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
+          <div className="text-center mb-3">
+            <h3 className="text-lg font-semibold text-blue-800 mb-2">📱 Step 1: Open This URL in Your Browser</h3>
+            <p className="text-sm text-blue-700 mb-3">
+              First, open this URL in any web browser (on any device on your network):
+            </p>
+          </div>
+          <div className="bg-white p-3 rounded-lg border border-blue-200 mb-3">
+            <div className="font-mono text-sm text-center break-all select-all text-blue-900 font-semibold">
+              {getStreamURL()}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const url = getStreamURL()
+                navigator.clipboard.writeText(url)
+                // You could add a toast notification here
+              }}
+              className="flex-1 py-2 px-4 text-sm font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+            >
+              📋 Copy URL
+            </button>
+            <button
+              onClick={openReceiverURL}
+              className="flex-1 py-2 px-4 text-sm font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors"
+            >
+              🌐 Open in Browser
+            </button>
+          </div>
+        </div>
+
+        {/* Step 2 Header */}
+        <div className="text-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">📺 Step 2: Start Screen Sharing</h3>
+          <p className="text-sm text-gray-600">After opening the URL above, click the button below to start sharing</p>
+        </div>
+
         {/* Status */}
+        <div className="mb-6">
+          <ConnectionStatus 
+            connectionState={connectionState}
+            isStreaming={isStreaming}
+            error={error}
+            onRetry={retryConnection}
+            onOpenReceiver={openReceiverURL}
+            streamURL={getStreamURL()}
+          />
+        </div>
+        
+        {/* Fallback status display with new styling */}
         <div className={`rounded-lg p-4 mb-6 ${getStatusColor()}`}>
           <div className="flex items-center justify-center">
             <div className={getStatusDot()}></div>
-            <span className="font-medium">{message}</span>
+            <span className="font-medium">{getDisplayMessage()}</span>
           </div>
         </div>
 
         {/* TV Discovery Section */}
-        {!isConnected && (
+        {!isStreaming && (
           <div className="mb-6">
             <div className="flex gap-2 mb-4">
               <button
                 onClick={handleDiscoverTVs}
-                disabled={isDiscovering || status === 'connecting'}
+                disabled={isDiscovering || isButtonDisabled()}
                 className="flex-1 py-2 px-4 rounded-lg font-medium text-purple-700 bg-purple-100 hover:bg-purple-200 disabled:bg-gray-100 disabled:text-gray-400 transition-colors"
               >
                 {isDiscovering ? '🔄 Discovering...' : '🔍 Find TVs'}
@@ -288,18 +288,18 @@ function ScreenMirrorApp() {
           <div className="flex gap-2 mb-3">
             <input
               type="text"
-              value={selectedRoom}
-              onChange={(e) => setSelectedRoom(e.target.value)}
+              value={room}
+              onChange={(e) => setRoom(e.target.value)}
               placeholder="Enter room code"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              disabled={isConnected || status === 'connecting'}
+              disabled={isStreaming || isButtonDisabled()}
             />
           </div>
           <button
             onClick={handleConnect}
-            disabled={isButtonDisabled() || !selectedRoom.trim()}
+            disabled={isButtonDisabled() || !room.trim()}
             className={`w-full py-3 px-6 rounded-lg font-semibold text-white transition-all duration-200 ${
-              isButtonDisabled() || !selectedRoom.trim()
+              isButtonDisabled() || !room.trim()
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 hover:shadow-lg transform hover:-translate-y-0.5'
             }`}
@@ -308,40 +308,17 @@ function ScreenMirrorApp() {
           </button>
         </div>
 
-        {/* Stream URL Display (when sharing) */}
-        {status === 'streaming' && (
+        {/* Streaming Success Message */}
+        {isStreaming && (
           <div className="mb-6 p-4 bg-green-50 border-2 border-green-200 rounded-lg">
-            <div className="text-center mb-3">
-              <h3 className="text-lg font-semibold text-green-800 mb-2">📱 Share this URL</h3>
-              <p className="text-sm text-green-700 mb-3">
-                Anyone on your network can view the stream at:
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">✅ Screen Sharing Active!</h3>
+              <p className="text-sm text-green-700 mb-2">
+                Your screen is now being streamed to the browser window you opened.
               </p>
-            </div>
-            <div className="bg-white p-3 rounded-lg border border-green-200 mb-3">
-              <div className="font-mono text-sm text-center break-all select-all">
-                http://{localIP}:8080/web-receiver.html?room={selectedRoom}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  const url = `http://${localIP}:8080/web-receiver.html?room=${selectedRoom}`
-                  navigator.clipboard.writeText(url)
-                  // You could add a toast notification here
-                }}
-                className="flex-1 py-2 px-4 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors"
-              >
-                📋 Copy URL
-              </button>
-              <button
-                onClick={() => {
-                  const url = `http://${localIP}:8080/web-receiver.html?room=${selectedRoom}`
-                  window.open(url, '_blank')
-                }}
-                className="flex-1 py-2 px-4 text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200 rounded-lg transition-colors"
-              >
-                🌐 Open in Browser
-              </button>
+              <p className="text-xs text-green-600">
+                Keep this app running to continue sharing. Click "Stop Sharing" when done.
+              </p>
             </div>
           </div>
         )}
@@ -351,7 +328,7 @@ function ScreenMirrorApp() {
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-600 text-sm">Room:</span>
             <span className="font-mono bg-gray-200 px-2 py-1 rounded text-sm font-semibold">
-              {selectedRoom}
+              {room}
             </span>
           </div>
           <div className="flex justify-between items-center mb-3">
@@ -360,13 +337,13 @@ function ScreenMirrorApp() {
               {localIP}:8080
             </span>
           </div>
-          {status !== 'streaming' ? (
+          {!isStreaming ? (
             <p className="text-xs text-gray-500 text-center">
-              Click "Start Screen Sharing" to generate a shareable URL
+              📋 Remember: Open the URL above in a browser first, then start sharing
             </p>
           ) : (
             <p className="text-xs text-green-600 text-center font-medium">
-              ✅ Screen sharing active! Share the URL above
+              ✅ Screen sharing active! Your browser should now show the stream.
             </p>
           )}
         </div>

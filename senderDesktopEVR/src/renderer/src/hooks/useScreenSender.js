@@ -35,6 +35,15 @@ export const useScreenSender = () => {
 
           if (status === 'error' || status === 'failed') {
             setError(data)
+          } else if (status === 'no-receiver') {
+            setError({
+              message: data.message || 'No receiver found. Please open the stream URL in a web browser first.',
+              type: 'no-receiver',
+              showRetry: true,
+              showOpenUrl: true
+            })
+          } else if (status === 'checking-receiver') {
+            setError(null) // Clear any previous errors while checking
           } else {
             setError(null)
           }
@@ -269,6 +278,30 @@ export const useScreenSender = () => {
     }
   }, [startSharing])
 
+  // Get stream URL for user
+  const getStreamURL = useCallback(() => {
+    const streamPort = 8080 // Should match your receiver port
+    return `http://${localIP}:${streamPort}/web-receiver.html?room=${room}`
+  }, [localIP, room])
+
+  // Retry connection (useful when receiver becomes available)
+  const retryConnection = useCallback(async () => {
+    console.log('🔄 Retrying connection...')
+    setError(null)
+    await startSharing()
+  }, [startSharing])
+
+  // Open receiver URL in browser
+  const openReceiverURL = useCallback(() => {
+    const streamURL = getStreamURL()
+    console.log('🔗 Opening receiver URL:', streamURL)
+    if (window.api?.shell?.openExternal) {
+      window.api.shell.openExternal(streamURL)
+    } else if (window.open) {
+      window.open(streamURL, '_blank')
+    }
+  }, [getStreamURL])
+
   // Get local IP address on mount
   useEffect(() => {
     const getIP = async () => {
@@ -311,6 +344,11 @@ export const useScreenSender = () => {
     updateQuality,
     setRoom,
     setServerUrl,
+    retryConnection,
+    openReceiverURL,
+
+    // Helpers
+    getStreamURL,
 
     // Getters
     isActive: screenSenderRef.current?.isActive() || false,
