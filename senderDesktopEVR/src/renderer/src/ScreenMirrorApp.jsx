@@ -129,7 +129,7 @@ function ScreenMirrorApp() {
         {/* Receiver URL - Always Visible */}
         <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
           <div className="text-center mb-3">
-            <h3 className="text-lg font-semibold text-blue-800 mb-2">📱 Step 1: Create a Room</h3>
+            <h3 className="text-lg font-semibold text-blue-800 mb-2">⌨️ Step 1: Create a Room</h3>
             <p className="text-sm text-blue-700 mb-3">Enter your room code for private sharing:</p>
             <div className="flex gap-2 mb-3">
               <input

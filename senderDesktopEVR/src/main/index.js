@@ -78,7 +78,7 @@ const updateTrayMenu = () => {
   const streamURL = getStreamURL()
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: isStreaming ? '📺 Screen Mirror - Sharing' : '📱 Screen Mirror',
+      label: isStreaming ? 'Screen Mirror - Sharing' : 'Screen Mirror',
       enabled: false
     },
     { type: 'separator' },
@@ -96,7 +96,7 @@ const updateTrayMenu = () => {
               // Copy to clipboard only
               clipboard.writeText(streamURL)
               console.log('📋 Copied stream URL to clipboard:', streamURL)
-              
+
               // Show notification that URL was copied
               if (tray) {
                 tray.displayBalloon({
