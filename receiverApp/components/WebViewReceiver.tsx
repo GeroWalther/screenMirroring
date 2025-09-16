@@ -20,7 +20,7 @@ export default function WebViewReceiver() {
     status: 'loading',
     message: 'Loading web receiver...',
   });
-  const [showControls, setShowControls] = useState(true);
+  const [showControls, setShowControls] = useState(false); // Hidden by default
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentRoom, setCurrentRoom] = useState('living-room');
   const [showRoomSelector, setShowRoomSelector] = useState(false);
@@ -36,7 +36,7 @@ export default function WebViewReceiver() {
     'office',
   ];
 
-  // Auto-hide controls after 5 seconds
+  // Auto-hide controls after 8 seconds (longer delay)
   const resetControlsTimeout = () => {
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
@@ -44,7 +44,7 @@ export default function WebViewReceiver() {
     setShowControls(true);
     controlsTimeoutRef.current = setTimeout(() => {
       setShowControls(false);
-    }, 5000);
+    }, 8000); // Longer timeout
   };
 
   // Handle screen tap to show/hide controls
@@ -74,9 +74,10 @@ export default function WebViewReceiver() {
     setRefreshKey((prev) => prev + 1);
     setConnectionState({
       status: 'loading',
-      message: `Connecting to room: ${newRoom}...`,
+      message: `Switching to room: ${newRoom}...`,
     });
     setShowRoomSelector(false);
+    setShowControls(false); // Hide controls after room change
   };
 
   // Refresh WebView
@@ -93,7 +94,7 @@ export default function WebViewReceiver() {
     console.log('🌐 WebView loading started');
     setConnectionState({
       status: 'loading',
-      message: 'Loading web receiver...',
+      message: 'Loading...',
     });
   };
 
@@ -101,9 +102,10 @@ export default function WebViewReceiver() {
     console.log('🌐 WebView loaded successfully');
     setConnectionState({
       status: 'loaded',
-      message: 'Web receiver ready',
+      message: 'Ready for screen sharing',
     });
-    resetControlsTimeout();
+    // Don't show controls automatically after load
+    // resetControlsTimeout();
   };
 
   const handleError = (syntheticEvent: any) => {
@@ -178,28 +180,22 @@ export default function WebViewReceiver() {
         // Network and security
         originWhitelist={['*']}
         mixedContentMode={'always'}
-        // JavaScript to monitor connection state and auto-refresh
+        // Minimal JavaScript - no auto-refresh behavior
         injectedJavaScript={`
           console.log('📱 Screen Mirror Receiver App loaded');
           
-          // Monitor for disconnections and auto-refresh
+          // Just log when stream starts/stops, but don't auto-refresh
           let wasStreaming = false;
-          let checkInterval = setInterval(() => {
+          setInterval(() => {
             const videos = document.querySelectorAll('video');
             const isStreaming = videos.length > 0 && Array.from(videos).some(v => v.videoWidth > 0);
             
-            // If we were streaming but now we're not, wait 3 seconds then refresh
-            if (wasStreaming && !isStreaming) {
-              console.log('🔄 Stream ended, will refresh in 3 seconds...');
-              setTimeout(() => {
-                console.log('🔄 Auto-refreshing for new connection...');
-                window.location.reload();
-              }, 3000);
-              clearInterval(checkInterval); // Stop checking after refresh
+            if (wasStreaming !== isStreaming) {
+              console.log(isStreaming ? '🎥 Stream started' : '⏹️ Stream stopped');
             }
             
             wasStreaming = isStreaming;
-          }, 1000);
+          }, 2000);
           
           true; // Required for WebView
         `}
