@@ -12,8 +12,8 @@ interface ConnectionState {
   message: string;
 }
 
-// Web receiver URL - matches your working setup
-const WEB_RECEIVER_URL = 'http://192.168.0.26:8080/web-receiver.html?room=living-room';
+// Base URL for web receiver
+const BASE_WEB_RECEIVER_URL = 'http://192.168.0.26:8080/web-receiver.html';
 
 export default function WebViewReceiver() {
   const [connectionState, setConnectionState] = useState<ConnectionState>({
@@ -22,8 +22,19 @@ export default function WebViewReceiver() {
   });
   const [showControls, setShowControls] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [currentRoom, setCurrentRoom] = useState('living-room');
+  const [showRoomSelector, setShowRoomSelector] = useState(false);
   const webViewRef = useRef<WebView>(null);
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Common rooms for quick selection
+  const commonRooms = [
+    'living-room',
+    'bedroom',
+    'private',
+    'meeting',
+    'office',
+  ];
 
   // Auto-hide controls after 5 seconds
   const resetControlsTimeout = () => {
@@ -51,12 +62,29 @@ export default function WebViewReceiver() {
     }
   };
 
-  // Refresh WebView
-  const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
+  // Get current WebView URL with room parameter
+  const getCurrentURL = () => {
+    return `${BASE_WEB_RECEIVER_URL}?room=${currentRoom}`;
+  };
+
+  // Change room and refresh
+  const handleRoomChange = (newRoom: string) => {
+    console.log('🏠 Changing room from', currentRoom, 'to', newRoom);
+    setCurrentRoom(newRoom);
+    setRefreshKey((prev) => prev + 1);
     setConnectionState({
       status: 'loading',
-      message: 'Refreshing...'
+      message: `Connecting to room: ${newRoom}...`,
+    });
+    setShowRoomSelector(false);
+  };
+
+  // Refresh WebView
+  const handleRefresh = () => {
+    setRefreshKey((prev) => prev + 1);
+    setConnectionState({
+      status: 'loading',
+      message: 'Refreshing...',
     });
   };
 
@@ -65,7 +93,7 @@ export default function WebViewReceiver() {
     console.log('🌐 WebView loading started');
     setConnectionState({
       status: 'loading',
-      message: 'Loading web receiver...'
+      message: 'Loading web receiver...',
     });
   };
 
@@ -73,7 +101,7 @@ export default function WebViewReceiver() {
     console.log('🌐 WebView loaded successfully');
     setConnectionState({
       status: 'loaded',
-      message: 'Web receiver ready'
+      message: 'Web receiver ready',
     });
     resetControlsTimeout();
   };
@@ -83,7 +111,7 @@ export default function WebViewReceiver() {
     console.error('🌐 WebView error:', nativeEvent);
     setConnectionState({
       status: 'error',
-      message: `Load error: ${nativeEvent.description || 'Network issue'}`
+      message: `Load error: ${nativeEvent.description || 'Network issue'}`,
     });
   };
 
@@ -95,10 +123,14 @@ export default function WebViewReceiver() {
   // Get status indicator color
   const getStatusColor = () => {
     switch (connectionState.status) {
-      case 'loaded': return '#4CAF50'; // Green
-      case 'loading': return '#FF9800'; // Orange
-      case 'error': return '#f44336'; // Red
-      default: return '#757575'; // Gray
+      case 'loaded':
+        return '#4CAF50'; // Green
+      case 'loading':
+        return '#FF9800'; // Orange
+      case 'error':
+        return '#f44336'; // Red
+      default:
+        return '#757575'; // Gray
     }
   };
 
@@ -111,7 +143,7 @@ export default function WebViewReceiver() {
     };
   }, []);
 
-  console.log('🖼️ WebView Receiver - URL:', WEB_RECEIVER_URL, 'Status:', connectionState.status);
+  // console.log('🖼️ WebView Receiver - URL:', WEB_RECEIVER_URL, 'Status:', connectionState.status);
 
   return (
     <Pressable style={styles.root} onPress={handleScreenTap}>
@@ -121,51 +153,116 @@ export default function WebViewReceiver() {
       <WebView
         key={refreshKey}
         ref={webViewRef}
-        source={{ uri: WEB_RECEIVER_URL }}
+        source={{ uri: getCurrentURL() }}
         style={styles.webview}
         onLoadStart={handleLoadStart}
         onLoadEnd={handleLoadEnd}
         onError={handleError}
         onMessage={handleMessage}
-        // WebView configuration for optimal streaming
+        // Optimized WebView configuration for TV streaming
         javaScriptEnabled={true}
         domStorageEnabled={true}
-        startInLoadingState={true}
+        startInLoadingState={false} // Faster loading
         scalesPageToFit={true}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
-        // Allow media playback
+        // Media playback optimization
         mediaPlaybackRequiresUserAction={false}
         allowsInlineMediaPlayback={true}
-        // Network settings
-        cacheEnabled={false}
-        // Security - only needed for your local development
+        allowsFullscreenVideo={true}
+        // Performance optimizations
+        cacheEnabled={false} // Fresh content
+        javaScriptCanOpenWindowsAutomatically={true}
+        // Hardware acceleration
+        // androidHardwareAccelerationDisabled={false}
+        // Network and security
         originWhitelist={['*']}
-        // Simple JavaScript injection for basic monitoring
+        mixedContentMode={'always'}
+        // JavaScript to monitor connection state and auto-refresh
         injectedJavaScript={`
           console.log('📱 Screen Mirror Receiver App loaded');
+          
+          // Monitor for disconnections and auto-refresh
+          let wasStreaming = false;
+          let checkInterval = setInterval(() => {
+            const videos = document.querySelectorAll('video');
+            const isStreaming = videos.length > 0 && Array.from(videos).some(v => v.videoWidth > 0);
+            
+            // If we were streaming but now we're not, wait 3 seconds then refresh
+            if (wasStreaming && !isStreaming) {
+              console.log('🔄 Stream ended, will refresh in 3 seconds...');
+              setTimeout(() => {
+                console.log('🔄 Auto-refreshing for new connection...');
+                window.location.reload();
+              }, 3000);
+              clearInterval(checkInterval); // Stop checking after refresh
+            }
+            
+            wasStreaming = isStreaming;
+          }, 1000);
+          
           true; // Required for WebView
         `}
       />
 
-      {/* Minimal Status Overlay */}
+      {/* Controls Overlay */}
       {showControls && (
         <View style={styles.overlay}>
           <View style={styles.statusContainer}>
-            <View style={[styles.statusDot, { backgroundColor: getStatusColor() }]} />
-            <Text style={styles.overlayStatusText}>{connectionState.message}</Text>
+            <View
+              style={[styles.statusDot, { backgroundColor: getStatusColor() }]}
+            />
+            <Text style={styles.overlayStatusText}>
+              {connectionState.message}
+            </Text>
           </View>
-          
-          {/* Simple Controls */}
+
+          {/* Room Info */}
+          <View style={styles.roomContainer}>
+            <Text style={styles.roomText}>Room: {currentRoom}</Text>
+          </View>
+
+          {/* Controls */}
           <View style={styles.controlsContainer}>
-            <Pressable 
+            <Pressable
+              onPress={() => setShowRoomSelector(!showRoomSelector)}
+              style={styles.controlButton}>
+              <Text style={styles.controlButtonText}>🏠 Change Room</Text>
+            </Pressable>
+
+            <Pressable
               onPress={handleRefresh}
               hasTVPreferredFocus={true}
-              style={styles.controlButton}
-            >
+              style={styles.controlButton}>
               <Text style={styles.controlButtonText}>🔄 Refresh</Text>
             </Pressable>
           </View>
+
+          {/* Room Selector */}
+          {showRoomSelector && (
+            <View style={styles.roomSelector}>
+              <Text style={styles.roomSelectorTitle}>Select Room:</Text>
+              <View style={styles.roomButtons}>
+                {commonRooms.map((room) => (
+                  <Pressable
+                    key={room}
+                    onPress={() => handleRoomChange(room)}
+                    style={[
+                      styles.roomButton,
+                      currentRoom === room && styles.roomButtonActive,
+                    ]}>
+                    <Text
+                      style={[
+                        styles.roomButtonText,
+                        currentRoom === room && styles.roomButtonTextActive,
+                      ]}>
+                      {room}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -188,13 +285,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
   },
-  
+
   // WebView
   webview: {
     flex: 1,
     backgroundColor: '#000',
   },
-  
+
   // Minimal Overlay
   overlay: {
     position: 'absolute',
@@ -224,7 +321,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontWeight: '500',
   },
-  
+
+  // Room Info
+  roomContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  roomText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+
   // Controls
   controlsContainer: {
     flexDirection: 'row',
@@ -242,7 +353,46 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
   },
-  
+
+  // Room Selector
+  roomSelector: {
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  roomSelectorTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  roomButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  roomButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+    minWidth: 80,
+  },
+  roomButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  roomButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  roomButtonTextActive: {
+    fontWeight: 'bold',
+  },
+
   // Error Overlay
   errorOverlay: {
     position: 'absolute',

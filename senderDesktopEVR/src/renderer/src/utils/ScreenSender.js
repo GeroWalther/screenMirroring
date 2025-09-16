@@ -6,10 +6,10 @@
 class ScreenSender {
   constructor(options = {}) {
     // Auto-detect local network IP for signaling server
-    const LOCAL_IP = '192.168.0.26'; // Your Mac's IP address
+    const LOCAL_IP = '192.168.0.26' // Your Mac's IP address
     this.signalingUrl = options.signalingUrl || `ws://${LOCAL_IP}:8080`
     this.room = options.room || 'living-room' // Default room
-    
+
     console.log('🏠 ScreenSender created with room:', this.room, 'signaling:', this.signalingUrl)
     this.iceServers = options.iceServers || [
       // Enhanced STUN servers for better Android TV connectivity
@@ -17,7 +17,7 @@ class ScreenSender {
       { urls: 'stun:stun1.l.google.com:19302' },
       { urls: 'stun:stun2.l.google.com:19302' },
       { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' }
       // Add TURN servers for production (replace with your own)
       // { urls: 'turn:your-turn-server.com:3478', username: 'user', credential: 'pass' },
       // { urls: 'turns:your-turn-server.com:5349', username: 'user', credential: 'pass' }
@@ -44,12 +44,17 @@ class ScreenSender {
   // Check if receiver is available by testing the signaling server
   async checkReceiverAvailability() {
     return new Promise((resolve, reject) => {
-      console.log('🔍 Checking receiver availability at:', this.signalingUrl, 'for room:', this.room)
+      console.log(
+        '🔍 Checking receiver availability at:',
+        this.signalingUrl,
+        'for room:',
+        this.room
+      )
       this.updateStatus('checking-receiver')
-      
+
       const ws = new WebSocket(this.signalingUrl)
       let resolved = false
-      
+
       // Set timeout for availability check
       const timeout = setTimeout(() => {
         if (!resolved) {
@@ -59,7 +64,7 @@ class ScreenSender {
           reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
         }
       }, 5000) // 5 second timeout for availability check
-      
+
       ws.onopen = () => {
         if (!resolved) {
           resolved = true
@@ -69,7 +74,7 @@ class ScreenSender {
           resolve(true)
         }
       }
-      
+
       ws.onclose = (event) => {
         if (!resolved) {
           resolved = true
@@ -78,7 +83,7 @@ class ScreenSender {
           reject(new Error('No receiver found. Please open the stream URL in a web browser first.'))
         }
       }
-      
+
       ws.onerror = (error) => {
         if (!resolved) {
           resolved = true
@@ -97,7 +102,7 @@ class ScreenSender {
         room: this.room,
         timestamp: new Date().toISOString()
       })
-      
+
       this.updateStatus('starting')
 
       // First check if receiver is available
@@ -123,7 +128,7 @@ class ScreenSender {
       // Connect to signaling server
       console.log('🔗 SENDER - Attempting signaling server connection to:', this.signalingUrl)
       this.signalingClient.connect()
-      
+
       console.log('✅ SENDER - Start method completed, waiting for connection...')
     } catch (error) {
       console.error('❌ SENDER START FAILED:', error)
@@ -140,22 +145,27 @@ class ScreenSender {
     let reconnectDelay = 1000
     let connectionId = Math.random().toString(36).substr(2, 9)
     let connectionTimeout = null
-    let initialConnectionTimeout = null
-    
+    // let initialConnectionTimeout = null
+
     console.log('🏭 SIGNALING CLIENT CREATED - ID:', connectionId, 'URL:', url)
 
     const client = {
       connect() {
         try {
           console.log('🔗 SENDER WS CONNECT START - ID:', connectionId, 'URL:', url)
-          console.log('🔗 WebSocket.CONNECTING =', WebSocket.CONNECTING, 'WebSocket.OPEN =', WebSocket.OPEN)
-          
+          console.log(
+            '🔗 WebSocket.CONNECTING =',
+            WebSocket.CONNECTING,
+            'WebSocket.OPEN =',
+            WebSocket.OPEN
+          )
+
           // Clear any existing timeout
           if (connectionTimeout) {
             clearTimeout(connectionTimeout)
             connectionTimeout = null
           }
-          
+
           // Set connection timeout (10 seconds for initial connection)
           const timeoutDuration = reconnectAttempts === 0 ? 10000 : 5000
           connectionTimeout = setTimeout(() => {
@@ -163,7 +173,7 @@ class ScreenSender {
             if (ws && ws.readyState === WebSocket.CONNECTING) {
               console.log('❌ TIMEOUT: WebSocket still connecting, closing...')
               ws.close()
-              
+
               // If this is the first connection attempt, show no receiver error
               if (reconnectAttempts === 0) {
                 options.onStatusChange('no-receiver', {
@@ -173,20 +183,32 @@ class ScreenSender {
               }
             }
           }, timeoutDuration)
-          
+
           ws = new WebSocket(url)
-          console.log('🔗 WebSocket created - ReadyState:', ws.readyState, '(should be', WebSocket.CONNECTING, ')')
+          console.log(
+            '🔗 WebSocket created - ReadyState:',
+            ws.readyState,
+            '(should be',
+            WebSocket.CONNECTING,
+            ')'
+          )
 
           ws.onopen = () => {
             console.log('✅ SENDER WS CONNECTED - ID:', connectionId, 'URL:', url)
-            console.log('✅ WebSocket state: ReadyState =', ws.readyState, '(should be', WebSocket.OPEN, ')')
-            
+            console.log(
+              '✅ WebSocket state: ReadyState =',
+              ws.readyState,
+              '(should be',
+              WebSocket.OPEN,
+              ')'
+            )
+
             // Clear connection timeout on successful connection
             if (connectionTimeout) {
               clearTimeout(connectionTimeout)
               connectionTimeout = null
             }
-            
+
             reconnectAttempts = 0
             reconnectDelay = 1000
             console.log('📡 SENDER - Calling onStatusChange("connected")')
@@ -207,14 +229,19 @@ class ScreenSender {
           }
 
           ws.onclose = (event) => {
-            console.log('📴 Sender signaling disconnected - Code:', event.code, 'Reason:', event.reason)
+            console.log(
+              '📴 Sender signaling disconnected - Code:',
+              event.code,
+              'Reason:',
+              event.reason
+            )
             console.log('Close event details:', {
               wasClean: event.wasClean,
               code: event.code,
               reason: event.reason,
               url: url
             })
-            
+
             // Clear connection timeout on close
             if (connectionTimeout) {
               clearTimeout(connectionTimeout)
@@ -252,7 +279,8 @@ class ScreenSender {
             } else {
               console.log('❌ Max reconnection attempts reached, giving up')
               options.onStatusChange('no-receiver', {
-                message: 'Cannot connect to receiver. Please ensure the stream URL is open in a web browser.',
+                message:
+                  'Cannot connect to receiver. Please ensure the stream URL is open in a web browser.',
                 attempts: maxReconnectAttempts
               })
             }
@@ -275,8 +303,15 @@ class ScreenSender {
 
       send(message) {
         console.log('📨 SENDER WS SEND - Message:', message)
-        console.log('📨 WebSocket state: exists =', !!ws, 'readyState =', ws?.readyState, 'OPEN =', WebSocket.OPEN)
-        
+        console.log(
+          '📨 WebSocket state: exists =',
+          !!ws,
+          'readyState =',
+          ws?.readyState,
+          'OPEN =',
+          WebSocket.OPEN
+        )
+
         if (ws && ws.readyState === WebSocket.OPEN) {
           const payload = JSON.stringify(message)
           console.log('📨 SENDER - Sending payload:', payload)
@@ -297,7 +332,7 @@ class ScreenSender {
           clearTimeout(connectionTimeout)
           connectionTimeout = null
         }
-        
+
         if (ws) {
           ws.close()
           ws = null
@@ -361,7 +396,7 @@ class ScreenSender {
       signalingUrl: this.signalingUrl,
       signalingConnected: this.signalingClient?.isConnected()
     })
-    
+
     if (!this.signalingClient?.isConnected()) {
       console.warn('⚠️ Signaling client not connected, cannot join room')
       return
@@ -379,7 +414,7 @@ class ScreenSender {
         isConnected: this.signalingClient?.isConnected(),
         readyState: this.signalingClient?.ws?.readyState
       })
-      
+
       // Send join message
       this.signalingClient.send(joinMessage)
       console.log('✅ SENDER - Join message sent successfully')
@@ -455,49 +490,53 @@ class ScreenSender {
   async captureScreen() {
     try {
       console.log('Attempting Electron desktop capture...')
-      
+
       // Get available desktop sources using Electron's desktopCapturer
       const sources = await window.api.getDesktopSources()
       console.log('Available sources:', sources.length)
-      
+
       if (sources.length === 0) {
         throw new Error('No screen sources available')
       }
-      
+
       // Find the primary display - prioritize entire screen or first display
-      let primaryScreen = sources.find(source => 
-        source.name.includes('Entire screen') || 
-        source.name.includes('Screen 1') ||
-        source.name.toLowerCase().includes('main') ||
-        source.name.toLowerCase().includes('primary')
+      let primaryScreen = sources.find(
+        (source) =>
+          source.name.includes('Entire screen') ||
+          source.name.includes('Screen 1') ||
+          source.name.toLowerCase().includes('main') ||
+          source.name.toLowerCase().includes('primary')
       )
-      
+
       // Fallback to first screen source if no obvious primary found
       if (!primaryScreen) {
-        primaryScreen = sources.find(source => source.name.includes('Screen')) || sources[0]
+        primaryScreen = sources.find((source) => source.name.includes('Screen')) || sources[0]
       }
-      
+
       console.log('Using primary screen source:', primaryScreen.name)
-      console.log('Available sources:', sources.map(s => s.name))
-      
+      console.log(
+        'Available sources:',
+        sources.map((s) => s.name)
+      )
+
       // Create constraints for getUserMedia with Android TV compatibility
-      console.log('📺 Using Android TV-optimized video constraints');
+      console.log('📺 Using Android TV-optimized video constraints')
       const constraints = {
         audio: false, // Desktop audio capture is complex in Electron
         video: {
           mandatory: {
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: primaryScreen.id,
-            maxFrameRate: 15,    // Reduced from 30 for better compatibility
-            minFrameRate: 10,    // Minimum frame rate
-            maxWidth: 1280,      // Reduced from 1920 (720p width)
-            maxHeight: 720,      // Reduced from 1080 (720p height)
-            minWidth: 640,       // Minimum width
-            minHeight: 360       // Minimum height
+            maxFrameRate: 60, // Reduced from 30 for better compatibility
+            minFrameRate: 24, // Minimum frame rate
+            maxWidth: 1280, // Reduced from 1920 (720p width)
+            maxHeight: 720, // Reduced from 1080 (720p height)
+            minWidth: 640, // Minimum width
+            minHeight: 360 // Minimum height
           }
         }
       }
-      
+
       // Use getUserMedia with the desktop source
       this.localStream = await navigator.mediaDevices.getUserMedia(constraints)
       console.log('Electron desktop capture successful')
@@ -517,14 +556,17 @@ class ScreenSender {
         this.pc.addTrack(track, this.localStream)
       })
 
-      console.log(`Screen capture started - Video: ${this.localStream.getVideoTracks().length}, Audio: ${this.localStream.getAudioTracks().length}`)
-      
+      console.log(
+        `Screen capture started - Video: ${this.localStream.getVideoTracks().length}, Audio: ${this.localStream.getAudioTracks().length}`
+      )
     } catch (error) {
       console.error('Failed to capture screen:', error)
-      
+
       // Provide more specific error information
       if (error.name === 'NotAllowedError') {
-        throw new Error('Screen recording permission denied. Please grant permission in System Settings > Privacy & Security > Screen Recording')
+        throw new Error(
+          'Screen recording permission denied. Please grant permission in System Settings > Privacy & Security > Screen Recording'
+        )
       } else if (error.name === 'NotSupportedError') {
         throw new Error('Screen capture not supported in this browser environment')
       } else if (error.name === 'NotFoundError') {
@@ -542,11 +584,11 @@ class ScreenSender {
       const offer = await this.pc.createOffer()
 
       // Android TV optimization - let WebRTC choose best codec (often VP8 by default)
-      console.log('📺 Using default codec selection for Android TV compatibility');
+      console.log('📺 Using default codec selection for Android TV compatibility')
       // Temporarily disabled: offer.sdp = this.forceVP8ForAndroidTV(offer.sdp)
 
       await this.pc.setLocalDescription(offer)
-      
+
       // Set Android TV-friendly encoding parameters after setting local description
       setTimeout(() => {
         this.setAndroidTVEncodingParameters()
@@ -589,71 +631,71 @@ class ScreenSender {
 
   // Simple VP8 codec preference - safer approach
   forceVP8ForAndroidTV(sdp) {
-    console.log('📺 Applying VP8 preference for Android TV compatibility');
-    
+    console.log('📺 Applying VP8 preference for Android TV compatibility')
+
     // Simple approach: just reorder VP8 before H.264 in the m= line
-    const lines = sdp.split('\n');
-    
+    const lines = sdp.split('\n')
+
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
+      const line = lines[i]
+
       // Find the m=video line
       if (line.startsWith('m=video ')) {
-        console.log('📺 Original m=video line:', line);
-        
+        console.log('📺 Original m=video line:', line)
+
         // Extract payload types
-        const parts = line.split(' ');
+        const parts = line.split(' ')
         if (parts.length > 3) {
-          const port = parts[1];
-          const protocol = parts[2];
-          const payloads = parts.slice(3);
-          
+          const port = parts[1]
+          const protocol = parts[2]
+          const payloads = parts.slice(3)
+
           // Find VP8 payload type (usually 96)
-          const vp8Payloads = [];
-          const otherPayloads = [];
-          
+          const vp8Payloads = []
+          const otherPayloads = []
+
           // Check rtpmap lines to identify VP8
-          payloads.forEach(payload => {
+          payloads.forEach((payload) => {
             // Look ahead to find corresponding rtpmap
-            const rtpmapLine = lines.find(l => l.startsWith(`a=rtpmap:${payload} VP8`));
+            const rtpmapLine = lines.find((l) => l.startsWith(`a=rtpmap:${payload} VP8`))
             if (rtpmapLine) {
-              vp8Payloads.push(payload);
-              console.log('📺 Found VP8 payload:', payload);
+              vp8Payloads.push(payload)
+              console.log('📺 Found VP8 payload:', payload)
             } else {
-              otherPayloads.push(payload);
+              otherPayloads.push(payload)
             }
-          });
-          
+          })
+
           // Reorder: VP8 first, then others
           if (vp8Payloads.length > 0) {
-            const reorderedPayloads = vp8Payloads.concat(otherPayloads);
-            const newMLine = `m=video ${port} ${protocol} ${reorderedPayloads.join(' ')}`;
-            lines[i] = newMLine;
-            console.log('📺 Updated m=video line:', newMLine);
-            console.log('📺 VP8 now prioritized');
+            const reorderedPayloads = vp8Payloads.concat(otherPayloads)
+            const newMLine = `m=video ${port} ${protocol} ${reorderedPayloads.join(' ')}`
+            lines[i] = newMLine
+            console.log('📺 Updated m=video line:', newMLine)
+            console.log('📺 VP8 now prioritized')
           } else {
-            console.warn('⚠️ VP8 not found, keeping original order');
+            console.warn('⚠️ VP8 not found, keeping original order')
           }
         }
-        break;
+        break
       }
     }
-    
-    return lines.join('\n');
+
+    return lines.join('\n')
   }
-  
+
   // Set Android TV-optimized encoding parameters
   async setAndroidTVEncodingParameters() {
-    console.log('📺 Setting Android TV-optimized encoding parameters');
+    console.log('📺 Setting Android TV-optimized encoding parameters')
     try {
       await this.setEncodingParameters({
-        maxBitrate: 2000000,        // 2 Mbps - conservative for Android TV
-        maxFramerate: 15,           // Lower frame rate for stability
-        scaleResolutionDownBy: 1.0  // Keep original resolution (already lowered)
-      });
-      console.log('📺 Android TV encoding parameters applied');
+        maxBitrate: 1500000, // 1.5 Mbps - more conservative for WebView
+        maxFramerate: 60, // Higher frame rate for smoother video
+        scaleResolutionDownBy: 1.0 // Keep resolution
+      })
+      console.log('📺 Android TV encoding parameters applied')
     } catch (error) {
-      console.warn('⚠️ Could not set encoding parameters:', error.message);
+      console.warn('⚠️ Could not set encoding parameters:', error.message)
     }
   }
 
@@ -725,7 +767,7 @@ class ScreenSender {
   // Cancel connection attempt (different from stop - for when connecting)
   cancelConnection() {
     console.log('🛑 Canceling connection attempt...')
-    
+
     // Mark as stopping to prevent reconnection attempts
     this.isStopping = true
     this.isConnected = false
@@ -756,7 +798,7 @@ class ScreenSender {
 
     this.updateStatus('cancelled')
     console.log('✅ Connection attempt cancelled')
-    
+
     // Reset stopping flag after a short delay
     setTimeout(() => {
       this.isStopping = false
@@ -765,7 +807,7 @@ class ScreenSender {
 
   stop() {
     console.log('Stopping screen sender...')
-    
+
     // Mark as stopping to prevent reconnection attempts
     this.isStopping = true
     this.isConnected = false
@@ -796,7 +838,7 @@ class ScreenSender {
 
     this.updateStatus('stopped')
     this.onStreamEnded()
-    
+
     // Reset stopping flag after a short delay
     setTimeout(() => {
       this.isStopping = false
@@ -824,8 +866,8 @@ class ScreenSender {
 
 // Export for both ES6 modules and CommonJS
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ScreenSender };
+  module.exports = { ScreenSender }
 }
 
-export default ScreenSender;
-export { ScreenSender };
+export default ScreenSender
+export { ScreenSender }
