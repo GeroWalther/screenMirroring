@@ -153,7 +153,6 @@ const startSharing = async () => {
     })
 
     if (tray) {
-      const streamURL = getStreamURL()
       tray.displayBalloon({
         title: 'Screen Mirror',
         content: `Screen sharing started successfully! Stream is active.`,
@@ -273,7 +272,7 @@ function createWindow() {
 }
 
 // IPC handlers
-ipcMain.on('connect-to-tv', (event, tvInfo) => {
+ipcMain.on('connect-to-tv', () => {
   console.log('Legacy connect-to-tv - using startSharing instead')
   startSharing()
 })
@@ -300,7 +299,6 @@ ipcMain.on('streaming-started', () => {
 
 ipcMain.on('streaming-stopped', () => {
   isStreaming = false
-  connectedTV = null
   updateTrayMenu()
 })
 
@@ -410,12 +408,6 @@ app.on('before-quit', () => {
   app.isQuiting = true
 
   // Cleanup mDNS
-  if (browser) {
-    browser.stop()
-  }
-  if (bonjour) {
-    bonjour.destroy()
-  }
 })
 
 // Prevent multiple instances
