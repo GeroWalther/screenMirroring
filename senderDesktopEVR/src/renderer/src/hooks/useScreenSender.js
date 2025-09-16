@@ -6,7 +6,7 @@ export const useScreenSender = () => {
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
-  const [room, setRoom] = useState('default-room')
+  const [room, setRoom] = useState('living-room') // Match ScreenSender default
   const [serverUrl, setServerUrl] = useState(
     process.env.NODE_ENV === 'production'
       ? 'wss://your-signaling-server.com' // Cloud WSS for production
@@ -44,6 +44,8 @@ export const useScreenSender = () => {
             })
           } else if (status === 'checking-receiver') {
             setError(null) // Clear any previous errors while checking
+          } else if (status === 'cancelled') {
+            setError(null) // Clear errors when cancelled
           } else {
             setError(null)
           }
@@ -104,9 +106,21 @@ export const useScreenSender = () => {
           screenSenderRef.current.stop()
         }
 
-        // Create new sender
-        console.log('🔧 Creating new screen sender')
-        screenSenderRef.current = createScreenSender(options)
+        // Use current room and serverUrl as final values
+        const finalRoom = options.room || room
+        const finalServerUrl = options.serverUrl || serverUrl
+        
+        // Create new sender with explicit parameters
+        console.log('🔧 Creating new screen sender with final params:', {
+          room: finalRoom,
+          serverUrl: finalServerUrl
+        })
+        
+        screenSenderRef.current = createScreenSender({
+          ...options,
+          room: finalRoom,
+          serverUrl: finalServerUrl
+        })
 
         // Start sharing
         console.log('▶️ Starting screen capture and sharing')
@@ -117,8 +131,22 @@ export const useScreenSender = () => {
         setConnectionState('error')
       }
     },
-    [createScreenSender]
+    [createScreenSender, room, serverUrl]
   )
+
+  // Cancel connection attempt
+  const cancelConnection = useCallback(() => {
+    console.log('🛑 Canceling connection attempt')
+    if (screenSenderRef.current) {
+      screenSenderRef.current.cancelConnection()
+      screenSenderRef.current = null
+    }
+    setConnectionState('disconnected')
+    setIsStreaming(false)
+    setError(null)
+    stopStatsCollection()
+    console.log('✅ Connection attempt cancelled')
+  }, [])
 
   // Stop screen sharing
   const stopSharing = useCallback(() => {
@@ -341,6 +369,7 @@ export const useScreenSender = () => {
     // Actions
     startSharing,
     stopSharing,
+    cancelConnection,
     updateQuality,
     setRoom,
     setServerUrl,

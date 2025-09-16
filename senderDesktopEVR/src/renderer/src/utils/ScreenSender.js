@@ -8,7 +8,9 @@ class ScreenSender {
     // Auto-detect local network IP for signaling server
     const LOCAL_IP = '192.168.0.26'; // Your Mac's IP address
     this.signalingUrl = options.signalingUrl || `ws://${LOCAL_IP}:8080`
-    this.room = options.room || 'living-room' // Match receiver default room
+    this.room = options.room || 'living-room' // Default room
+    
+    console.log('🏠 ScreenSender created with room:', this.room, 'signaling:', this.signalingUrl)
     this.iceServers = options.iceServers || [
       // Enhanced STUN servers for better Android TV connectivity
       { urls: 'stun:stun.l.google.com:19302' },
@@ -42,7 +44,7 @@ class ScreenSender {
   // Check if receiver is available by testing the signaling server
   async checkReceiverAvailability() {
     return new Promise((resolve, reject) => {
-      console.log('🔍 Checking receiver availability at:', this.signalingUrl)
+      console.log('🔍 Checking receiver availability at:', this.signalingUrl, 'for room:', this.room)
       this.updateStatus('checking-receiver')
       
       const ws = new WebSocket(this.signalingUrl)
@@ -354,6 +356,12 @@ class ScreenSender {
 
   async joinRoom() {
     console.log('📱 Sender attempting to join room:', this.room)
+    console.log('📱 Current sender state:', {
+      room: this.room,
+      signalingUrl: this.signalingUrl,
+      signalingConnected: this.signalingClient?.isConnected()
+    })
+    
     if (!this.signalingClient?.isConnected()) {
       console.warn('⚠️ Signaling client not connected, cannot join room')
       return
@@ -714,6 +722,47 @@ class ScreenSender {
     return this.pc.getStats()
   }
 
+  // Cancel connection attempt (different from stop - for when connecting)
+  cancelConnection() {
+    console.log('🛑 Canceling connection attempt...')
+    
+    // Mark as stopping to prevent reconnection attempts
+    this.isStopping = true
+    this.isConnected = false
+
+    // Close signaling
+    if (this.signalingClient) {
+      this.signalingClient.close()
+      this.signalingClient = null
+    }
+
+    // Close peer connection
+    if (this.pc) {
+      this.pc.close()
+      this.pc = null
+    }
+
+    // Stop local stream
+    if (this.localStream) {
+      this.localStream.getTracks().forEach((track) => track.stop())
+      this.localStream = null
+    }
+
+    // Clear debug interval if it exists
+    if (this._debugInterval) {
+      clearInterval(this._debugInterval)
+      this._debugInterval = null
+    }
+
+    this.updateStatus('cancelled')
+    console.log('✅ Connection attempt cancelled')
+    
+    // Reset stopping flag after a short delay
+    setTimeout(() => {
+      this.isStopping = false
+    }, 500)
+  }
+
   stop() {
     console.log('Stopping screen sender...')
     
@@ -768,6 +817,7 @@ class ScreenSender {
   }
 
   setRoom(newRoom) {
+    console.log('🏠 Updating room from', this.room, 'to', newRoom)
     this.room = newRoom
   }
 }

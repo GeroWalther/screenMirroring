@@ -13,6 +13,7 @@ function ScreenMirrorApp() {
     localIP,
     startSharing,
     stopSharing,
+    cancelConnection,
     retryConnection,
     openReceiverURL,
     getStreamURL,
@@ -27,9 +28,16 @@ function ScreenMirrorApp() {
   }, [])
 
   const handleConnect = async () => {
+    const status = getDisplayStatus()
+
     if (isStreaming) {
+      // Stop sharing when streaming
       stopSharing()
+    } else if (status === 'connecting' || status === 'checking') {
+      // Cancel connection attempt when connecting
+      cancelConnection()
     } else {
+      // Start sharing when ready
       await startSharing()
     }
   }
@@ -100,14 +108,14 @@ function ScreenMirrorApp() {
   const getButtonText = () => {
     const status = getDisplayStatus()
     if (status === 'streaming') return '🛑 Stop Sharing'
-    if (status === 'connecting' || status === 'checking') return '⏳ Connecting...'
+    if (status === 'connecting' || status === 'checking') return '❌ Cancel Connection'
     if (status === 'error' || status === 'no-receiver') return '🔄 Try Again'
     return '🚀 Start Screen Sharing'
   }
 
   const isButtonDisabled = () => {
-    const status = getDisplayStatus()
-    return status === 'connecting' || status === 'checking'
+    // Button should never be disabled - user can always cancel or stop
+    return false
   }
 
   return (
@@ -123,11 +131,23 @@ function ScreenMirrorApp() {
         {/* Receiver URL - Always Visible */}
         <div className="mb-6 p-4 bg-blue-50 border-2 border-blue-200 rounded-lg">
           <div className="text-center mb-3">
+            <h3 className="text-lg font-semibold text-blue-800 mb-2">📱 Step 1: Create a Room</h3>
+            <p className="text-sm text-blue-700 mb-3">Enter your room code for private sharing:</p>
+            <div className="flex gap-2 mb-3">
+              <input
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                placeholder="Enter room code"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                disabled={isStreaming || isButtonDisabled()}
+              />
+            </div>
             <h3 className="text-lg font-semibold text-blue-800 mb-2">
-              📱 Step 1: Open This URL in Your Browser
+              📱 Step 2: Open This URL in Your Browser
             </h3>
             <p className="text-sm text-blue-700 mb-3">
-              First, open this URL in any web browser (on any device on your network):
+              Open this URL in any web browser (on any device on your network):
             </p>
           </div>
           <div className="bg-white p-3 rounded-lg border border-blue-200 mb-3">
@@ -157,14 +177,14 @@ function ScreenMirrorApp() {
 
         {/* Step 2 Header */}
         <div className="text-center mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">📺 Step 2: Start Screen Sharing</h3>
+          <h3 className="text-lg font-semibold text-gray-800">📺 Step 3: Start Screen Sharing</h3>
           <p className="text-sm text-gray-600">
             After opening the URL above, click the button below to start sharing
           </p>
         </div>
 
         {/* Status */}
-        <div className="mb-6">
+        {/* <div className="mb-6">
           <ConnectionStatus
             connectionState={connectionState}
             isStreaming={isStreaming}
@@ -173,7 +193,7 @@ function ScreenMirrorApp() {
             onOpenReceiver={openReceiverURL}
             streamURL={getStreamURL()}
           />
-        </div>
+        </div> */}
 
         {/* Fallback status display with new styling */}
         <div className={`rounded-lg p-4 mb-6 ${getStatusColor()}`}>
@@ -185,16 +205,6 @@ function ScreenMirrorApp() {
 
         {/* Manual Room Connection */}
         <div className="mb-6">
-          <div className="flex gap-2 mb-3">
-            <input
-              type="text"
-              value={room}
-              onChange={(e) => setRoom(e.target.value)}
-              placeholder="Enter room code"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              disabled={isStreaming || isButtonDisabled()}
-            />
-          </div>
           <button
             onClick={handleConnect}
             disabled={isButtonDisabled() || !room.trim()}
